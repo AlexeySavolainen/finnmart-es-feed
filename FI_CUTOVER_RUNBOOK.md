@@ -5,7 +5,10 @@ Prepared on 2026-09-12 for Merchant Center account `5052901478`.
 Status: production cutover completed on 2026-09-12. The active own source is
 `Vuodevaatteet FI – Own Production`, ID `10728562355`. Its first fetch updated
 126,725 offers, added six, recognized every attribute, and reported no file
-errors. This document now also serves as the rollback and observation runbook.
+errors. The stable source-table count is 126,720. Simprosys recreated a five-item
+Merchant API source once; its Google OAuth permissions were then revoked and the
+recreated source `10728797040` was removed. This document now also serves as the
+rollback and observation runbook.
 
 ## Decision
 
@@ -94,7 +97,9 @@ Rollback procedure:
 3. Confirm that its Merchant API source and offer count return.
 4. Keep the own source from fetching until the cause is corrected.
 
-Do not cancel the Simprosys subscription during the observation period.
+Do not cancel the Simprosys subscription during the observation period. Restoring
+Simprosys requires explicitly reconnecting its Google account because its OAuth
+permissions were revoked during cutover.
 
 ## Observation and cancellation
 

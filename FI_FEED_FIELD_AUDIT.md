@@ -13,12 +13,17 @@ The production cutover completed on 2026-09-12. The old Simprosys source
 - Scheduled fetch: every 24 hours at 06:00 Europe/Helsinki, after the GitHub build
 - First fetch: 126,725 offers updated, six new, all attributes recognized
 - Source-file errors: none
+- Stable source-table count after processing: 126,720
 - Verified Royal Textile offer: approved, visible on Google and in ads; Finnish
   landing page, price/sale price, GTIN/MPN, availability, variant size, and all
   five variant labels were correct
 
 The isolated `FI-PILOT` source remains paused and separate during the observation
-period. The Simprosys subscription has not been cancelled, preserving rollback.
+period. Simprosys automatically recreated a Merchant API source with five items
+after the initial deletion. Its Google OAuth access was therefore revoked and
+the recreated source `10728797040` was deleted. A follow-up check showed only the
+own production source and isolated pilot. The Simprosys Shopify subscription has
+not been cancelled.
 
 ## Current Simprosys source
 
