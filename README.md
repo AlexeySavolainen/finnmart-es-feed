@@ -31,6 +31,19 @@ Pilot validation and field-coverage report:
 Google custom labels 0–4 are read at variant level and never inherited from the
 parent Shopify product.
 
+Full Finland production candidate (all active and published Shopify products):
+
+`/vuodevaatteet-fi-production-candidate.xml`
+
+Full field-coverage and validation report:
+
+`/vuodevaatteet-fi-production-candidate-summary.json`
+
+The full candidate uses stable `shopify_FI_` offer IDs and is intentionally not
+connected to Merchant Center automatically. It is generated with Shopify Bulk
+GraphQL and written/validated as a stream so the complete catalog does not need
+to fit in memory.
+
 The current Simprosys/GMC field audit and label findings are documented in
 `FI_FEED_FIELD_AUDIT.md`.
 
