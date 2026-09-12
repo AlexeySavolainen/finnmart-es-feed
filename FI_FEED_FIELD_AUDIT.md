@@ -43,10 +43,10 @@ Labels 0–4 are offer-level data: the replacement feed reads them only from eac
 Shopify variant's `mm-google-shopping` metafields. It does not inherit labels
 from the parent product. Labels 3 and 4 visible in Simprosys product editing can
 differ from the values actually sent to GMC. GMC has no rules that cause this
-difference, so it is internal to Simprosys. The pilot reports both field
-coverage and every variant label value sourced directly from Shopify. Before a
-full cutover, the production label 3/4 logic must be recreated explicitly or
-exported from Simprosys.
+difference, so it is internal to Simprosys. The replacement intentionally uses
+the current variant values in Shopify as the source of truth, as approved for
+the migration. The pilot and full report preserve both field coverage and every
+variant label value sourced directly from Shopify.
 
 ## Pilot safety
 

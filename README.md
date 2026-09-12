@@ -47,6 +47,10 @@ to fit in memory.
 The current Simprosys/GMC field audit and label findings are documented in
 `FI_FEED_FIELD_AUDIT.md`.
 
+The guarded, non-overlapping migration procedure is documented in
+`FI_CUTOVER_RUNBOOK.md`. The live Simprosys source must not overlap with the own
+production source under the same Finnish language and `FI` feed label.
+
 ## Full Market synchronization
 
 `sync_feed.py` reads only Shopify MarketCatalog
