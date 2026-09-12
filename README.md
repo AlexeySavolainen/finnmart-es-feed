@@ -20,6 +20,17 @@ Machine-readable validation report:
 
 `/finnmart-es-summary.json`
 
+Finland replacement pilot (100 Shopify products, isolated from live ads):
+
+`/vuodevaatteet-fi-pilot.xml`
+
+Pilot validation and field-coverage report:
+
+`/vuodevaatteet-fi-pilot-summary.json`
+
+The current Simprosys/GMC field audit and label findings are documented in
+`FI_FEED_FIELD_AUDIT.md`.
+
 ## Full Market synchronization
 
 `sync_feed.py` reads only Shopify MarketCatalog

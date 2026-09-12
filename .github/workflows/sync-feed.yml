@@ -24,11 +24,15 @@ jobs:
         with:
           python-version: "3.13"
       - name: Run unit tests
-        run: python -m unittest -v test_sync_feed.py
+        run: python -m unittest -v test_sync_feed.py test_sync_fi_pilot.py
       - name: Synchronize the Shopify Spain Market catalog
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_feed.py
+      - name: Build the isolated Finland 100-product pilot
+        env:
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+        run: python sync_fi_pilot.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
