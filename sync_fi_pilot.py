@@ -35,7 +35,8 @@ ROYAL_SAMPLE_QUERIES = (
     ('status:active AND published_status:published AND tag:"New Royal Textile"', 17),
     ('status:active AND published_status:published AND tag:"Old Royal Textile"', 16),
 )
-EXCLUDED_DESTINATIONS = ("Shopping_ads", "Display_ads", "Free_listings")
+EXCLUDED_DESTINATIONS = ("Shopping_ads", "Display_ads")
+PILOT_PAUSE = "all"
 GOOGLE_NAMESPACE = "mm-google-shopping"
 LABEL_KEYS = tuple(f"custom_label_{index}" for index in range(5))
 OPTION_FIELDS = {
@@ -277,6 +278,7 @@ def add_product(channel: ET.Element, supplier: str, product: dict, report: dict)
                 child(item, key, metafields[key])
         for destination in EXCLUDED_DESTINATIONS:
             child(item, "excluded_destination", destination)
+        child(item, "pause", PILOT_PAUSE)
         item_count += 1
     return item_count
 
@@ -372,6 +374,8 @@ def build(secret: str, out: Path, summary_path: Path, product_limit: int = PILOT
     for destination in EXCLUDED_DESTINATIONS:
         if len(parsed.findall(f"./channel/item/{{{G}}}excluded_destination[.='{destination}']")) != items:
             raise RuntimeError(f"Pilot destination exclusion failed: {destination}")
+    if len(parsed.findall(f"./channel/item/{{{G}}}pause[.='{PILOT_PAUSE}']")) != items:
+        raise RuntimeError("Pilot pause isolation failed")
 
     summary = {
         "status": "validated",
@@ -386,6 +390,7 @@ def build(secret: str, out: Path, summary_path: Path, product_limit: int = PILOT
         "sample_quotas": dict(SAMPLE_QUOTAS),
         "suppliers": dict(suppliers),
         "excluded_destinations": list(EXCLUDED_DESTINATIONS),
+        "pause": PILOT_PAUSE,
         "skipped_candidates": skipped,
         **{key: value for key, value in report.items() if key != "labels"},
         "labels": {

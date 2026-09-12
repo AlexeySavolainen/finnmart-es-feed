@@ -48,11 +48,11 @@ must be recreated explicitly or exported from Simprosys.
 
 ## Pilot safety
 
-The pilot uses distinct `pilot_FI_...` offer and group IDs and submits repeated
-`excluded_destination` values for `Shopping_ads`, `Display_ads`, and
-`Free_listings`. It can therefore be inspected in GMC without replacing or
-advertising the live Simprosys offers. The feed uses the approved 1 kg fallback
-only when Shopify has no positive variant weight.
+The pilot uses distinct `pilot_FI_...` offer and group IDs, excludes
+`Shopping_ads` and `Display_ads`, and submits `pause=all`. The source itself is
+limited to free listings. This leaves one valid diagnostic destination while
+preventing the pilot offers from being shown. The feed uses the approved 1 kg
+fallback only when Shopify has no positive variant weight.
 
 Shopify taxonomy or the `mm-google-shopping.google_product_category` metafield
 is used first. NovaEngel perfume products without either value receive the

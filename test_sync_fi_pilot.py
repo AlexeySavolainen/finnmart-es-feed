@@ -59,6 +59,7 @@ class FinlandPilotTests(unittest.TestCase):
         self.assertEqual(value("size"), "80x200")
         destinations = [node.text for node in item.findall(f"{{{feed.G}}}excluded_destination")]
         self.assertEqual(destinations, list(feed.EXCLUDED_DESTINATIONS))
+        self.assertEqual(value("pause"), "all")
 
     def test_invalid_weight_uses_one_kilogram(self):
         product = self.sample_product()
