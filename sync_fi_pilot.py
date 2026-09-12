@@ -98,9 +98,11 @@ PRODUCT_QUERY = """query FinlandPilotProducts($first: Int!, $query: String!) {
           compareAtPrice
           availableForSale
           selectedOptions { name value }
-          metafields(first: 100) {
-            nodes { namespace key type value }
-          }
+          customLabel0: metafield(namespace: "mm-google-shopping", key: "custom_label_0") { value }
+          customLabel1: metafield(namespace: "mm-google-shopping", key: "custom_label_1") { value }
+          customLabel2: metafield(namespace: "mm-google-shopping", key: "custom_label_2") { value }
+          customLabel3: metafield(namespace: "mm-google-shopping", key: "custom_label_3") { value }
+          customLabel4: metafield(namespace: "mm-google-shopping", key: "custom_label_4") { value }
           inventoryItem {
             unitCost { amount currencyCode }
             measurement { weight { value unit } }
@@ -140,6 +142,15 @@ def google_metafields(resource: dict) -> dict[str, str]:
         value = clean_text(row.get("value"))
         if value:
             values[clean_text(row.get("key"))] = value
+    return values
+
+
+def variant_google_labels(variant: dict) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for index, key in enumerate(LABEL_KEYS):
+        value = clean_text((variant.get(f"customLabel{index}") or {}).get("value"))
+        if value:
+            values[key] = value
     return values
 
 
@@ -214,7 +225,7 @@ def add_product(channel: ET.Element, supplier: str, product: dict, report: dict)
     category = category or PRODUCT_TYPE_CATEGORY_FALLBACKS.get(product_type.casefold(), "")
     item_count = 0
     for variant in variants["nodes"]:
-        variant_metafields = google_metafields(variant)
+        variant_labels = variant_google_labels(variant)
         variant_id = numeric_gid(variant["id"])
         current = decimal_money(variant.get("price"))
         if not current:
@@ -274,9 +285,9 @@ def add_product(channel: ET.Element, supplier: str, product: dict, report: dict)
 
         add_option_fields(item, variant, metafields)
         for key in LABEL_KEYS:
-            if variant_metafields.get(key):
-                child(item, key, variant_metafields[key])
-                report["labels"][key][variant_metafields[key]] += 1
+            if variant_labels.get(key):
+                child(item, key, variant_labels[key])
+                report["labels"][key][variant_labels[key]] += 1
         for key in PASSTHROUGH_FIELDS:
             if key not in OPTION_FIELDS and key != "condition" and metafields.get(key):
                 child(item, key, metafields[key])

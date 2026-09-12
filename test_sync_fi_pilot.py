@@ -28,10 +28,8 @@ class FinlandPilotTests(unittest.TestCase):
                 "compareAtPrice": "60.60",
                 "availableForSale": True,
                 "selectedOptions": [{"name": "Koko", "value": "80x200"}],
-                "metafields": {"nodes": [
-                    {"namespace": "mm-google-shopping", "key": "custom_label_0", "value": "Royal Textile"},
-                    {"namespace": "mm-google-shopping", "key": "custom_label_1", "value": "G0039"},
-                ]},
+                "customLabel0": {"value": "Royal Textile"},
+                "customLabel1": {"value": "G0039"},
                 "inventoryItem": {
                     "unitCost": {"amount": "10.25", "currencyCode": "EUR"},
                     "measurement": {"weight": {"value": 1000, "unit": "GRAMS"}},
@@ -66,7 +64,8 @@ class FinlandPilotTests(unittest.TestCase):
 
     def test_labels_are_never_inherited_from_product(self):
         product = self.sample_product()
-        product["variants"]["nodes"][0]["metafields"] = {"nodes": []}
+        product["variants"]["nodes"][0]["customLabel0"] = None
+        product["variants"]["nodes"][0]["customLabel1"] = None
         channel = ET.Element("channel")
         feed.add_product(channel, "Royal Textile", product, self.empty_report())
         item = channel.find("item")
