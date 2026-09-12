@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: finnmart-es-feed
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: ./public
+    autoDeployTrigger: commit
+    headers:
+      - path: /finnmart-es-pilot.xml
+        name: Content-Type
+        value: application/xml; charset=utf-8
+      - path: /finnmart-es-pilot.xml
+        name: Cache-Control
+        value: public, max-age=3600
+
