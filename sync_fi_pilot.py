@@ -2,7 +2,7 @@
 """Build an isolated 100-product Finland feed pilot from Shopify.
 
 The pilot mirrors the field set currently used by Simprosys but uses distinct
-offer IDs and excludes every offer from ads and free listings. It is safe to
+offer IDs, excludes paid destinations, and pauses every offer. It is safe to
 import beside the existing live API source for diagnostics.
 """
 from __future__ import annotations
