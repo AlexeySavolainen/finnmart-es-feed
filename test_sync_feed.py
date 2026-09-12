@@ -47,6 +47,34 @@ class SyncFeedTests(unittest.TestCase):
         self.assertEqual(values["min_transit_time"], "3")
         self.assertEqual(values["max_transit_time"], "5")
 
+    def test_invalid_weight_uses_one_kilogram(self):
+        channel = ET.Element("channel")
+        candidate = feed.Candidate(123, "producto-nova", "NovaEngel")
+        product = {
+            "title": "Producto Royal",
+            "description": "Descripción española",
+            "type": "Textil",
+            "vendor": "NovaEngel",
+            "images": ["https://cdn.example.test/image.jpg"],
+            "options": ["Title"],
+            "variants": [{
+                "id": 789,
+                "price": 2999,
+                "available": True,
+                "weight": 0,
+                "sku": "ROYAL-1",
+                "barcode": "",
+                "options": ["Default Title"],
+            }],
+        }
+        report = {}
+        self.assertEqual(feed.add_product(channel, candidate, product, report), 1)
+        self.assertEqual(report["weight_fallback_items"], 1)
+        self.assertEqual(report["weight_fallback_by_supplier"], {"NovaEngel": 1})
+        self.assertEqual(channel.find(f"item/{{{feed.G}}}shipping_weight").text, "1000 g")
+        price = channel.find(f"item/{{{feed.G}}}shipping/{{{feed.G}}}price")
+        self.assertEqual(price.text, "11.50 EUR")
+
 
 if __name__ == "__main__":
     unittest.main()

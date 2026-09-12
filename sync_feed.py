@@ -2,8 +2,8 @@
 """Synchronize the Spain Merchant feed from one Shopify Market catalog.
 
 The script is intentionally read-only against Shopify. It resolves the exact
-MarketCatalog publication, requires reviewed Spanish translations, fetches the
-live Spanish storefront representation, validates the complete result and only
+MarketCatalog publication, requires reviewed Spanish translations, exports the
+catalog through Shopify Bulk GraphQL, validates the complete result and only
 then atomically replaces the public XML file.
 """
 from __future__ import annotations
@@ -21,7 +21,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 
@@ -31,6 +33,8 @@ API_VERSION = "2026-07"
 CATALOG_ID = "gid://shopify/MarketCatalog/166288720196"
 CATALOG_TITLE = "Finnmart EU – NovaEngel + Royal Textile"
 MARKET_ID = "106799857988"
+MARKET_GID = f"gid://shopify/Market/{MARKET_ID}"
+PUBLICATION_ID = "gid://shopify/Publication/327947911492"
 STORE = "https://finnmart.eu"
 LOCALE = "es"
 COUNTRY = "ES"
@@ -66,6 +70,103 @@ CATALOG_QUERY = """query CatalogProducts($id: ID!, $after: String) {
           translations(locale: \"es\") { key value }
         }
       }
+    }
+  }
+}"""
+
+BULK_PRODUCT_FIELDS = """
+  id
+  __typename
+  status
+  tags
+  vendor
+  translations(locale: "es") { key value }
+  media {
+    edges { node {
+      __typename
+      ... on MediaImage { id image { url } }
+    } }
+  }
+  variants {
+    edges { node {
+      id
+      __typename
+      legacyResourceId
+      availableForSale
+      barcode
+      sku
+      selectedOptions { name value }
+      contextualPricing(context: {country: ES}) {
+        price { amount currencyCode }
+      }
+      inventoryItem {
+        measurement { weight { value unit } }
+      }
+    } }
+  }
+"""
+
+BULK_PRODUCT_PROBE_FIELDS = BULK_PRODUCT_FIELDS.replace(
+    "  media {", "  media(first: 10) {"
+).replace(
+    "  variants {", "  variants(first: 100) {"
+)
+
+BULK_PRODUCT_PROBE_QUERY = """query BulkProductProbe($publicationId: ID!) {
+  publication(id: $publicationId) {
+    includedProducts(first: 1) {
+      nodes {
+""" + BULK_PRODUCT_PROBE_FIELDS + """
+      }
+    }
+  }
+}"""
+
+CATALOG_METADATA_QUERY = """query CatalogMetadata($id: ID!) {
+  catalog(id: $id) {
+    __typename
+    id
+    title
+    status
+    publication {
+      id
+      includedProductsCount(limit: null) { count precision }
+    }
+  }
+}"""
+
+BULK_RUN_MUTATION = """mutation RunFeedBulkQuery($query: String!) {
+  bulkOperationRunQuery(query: $query) {
+    bulkOperation { id status }
+    userErrors { field message }
+  }
+}"""
+
+BULK_STATUS_QUERY = """query FeedBulkStatus($id: ID!) {
+  bulkOperation(id: $id) {
+    id
+    status
+    errorCode
+    objectCount
+    rootObjectCount
+    fileSize
+    url
+    partialDataUrl
+  }
+}"""
+
+RECENT_BULK_QUERY = """query RecentFeedBulkOperations {
+  bulkOperations(first: 5, sortKey: CREATED_AT, reverse: true) {
+    nodes {
+      id
+      status
+      errorCode
+      createdAt
+      completedAt
+      objectCount
+      rootObjectCount
+      fileSize
+      url
     }
   }
 }"""
@@ -224,6 +325,233 @@ class Shopify:
         raise RuntimeError("Shopify GraphQL retry limit reached")
 
 
+def catalog_metadata(api: Shopify) -> dict:
+    data = api.call(CATALOG_METADATA_QUERY, {"id": CATALOG_ID})
+    catalog = data.get("catalog")
+    if not catalog:
+        raise RuntimeError("Shopify Market catalog not found")
+    if (
+        catalog.get("__typename") != "MarketCatalog"
+        or catalog.get("id") != CATALOG_ID
+        or catalog.get("title") != CATALOG_TITLE
+        or catalog.get("status") != "ACTIVE"
+    ):
+        raise RuntimeError("Catalog identity/title/status guard failed")
+    publication = catalog.get("publication")
+    if not publication or publication.get("id") != PUBLICATION_ID:
+        raise RuntimeError("Unexpected Market publication")
+    count = publication.get("includedProductsCount", {})
+    if count.get("precision") != "EXACT":
+        raise RuntimeError("Shopify did not return an exact Market product count")
+    return {
+        "catalog_id": CATALOG_ID,
+        "catalog_title": CATALOG_TITLE,
+        "publication_id": PUBLICATION_ID,
+        "included_products": int(count["count"]),
+    }
+
+
+def bulk_query_document() -> str:
+    return (
+        "{\n"
+        f'  publication(id: "{PUBLICATION_ID}") {{\n'
+        "    includedProducts {\n"
+        "      edges { node {\n"
+        + BULK_PRODUCT_FIELDS
+        + "      } }\n"
+        "    }\n"
+        "  }\n"
+        "}"
+    )
+
+
+def run_bulk_query(api: Shopify) -> dict:
+    payload = api.call(BULK_RUN_MUTATION, {"query": bulk_query_document()})
+    result = payload["bulkOperationRunQuery"]
+    if result.get("userErrors"):
+        raise RuntimeError("Shopify rejected bulk query: " + json.dumps(result["userErrors"]))
+    operation = result.get("bulkOperation")
+    if not operation:
+        raise RuntimeError("Shopify did not create a bulk query")
+    operation_id = operation["id"]
+    started = time.monotonic()
+    last_count = None
+    while True:
+        operation = api.call(BULK_STATUS_QUERY, {"id": operation_id}).get("bulkOperation")
+        if not operation:
+            raise RuntimeError("Shopify bulk operation disappeared")
+        status = operation["status"]
+        count = int(operation.get("objectCount") or 0)
+        if count != last_count:
+            print(f"Bulk operation {status}: objects={count}", flush=True)
+            last_count = count
+        if status == "COMPLETED":
+            if not operation.get("url"):
+                raise RuntimeError("Completed Shopify bulk operation has no result URL")
+            return operation
+        if status in {"FAILED", "CANCELED", "EXPIRED"}:
+            raise RuntimeError(
+                f"Shopify bulk operation {status}: {operation.get('errorCode') or 'unknown error'}"
+            )
+        if time.monotonic() - started > 90 * 60:
+            raise RuntimeError("Shopify bulk operation exceeded 90 minutes")
+        time.sleep(10)
+
+
+def money_to_cents(value: object) -> int:
+    try:
+        cents = (Decimal(str(value)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        raise ValueError("Invalid contextual price") from None
+    amount = int(cents)
+    if amount <= 0:
+        raise ValueError("Non-positive contextual price")
+    return amount
+
+
+def bulk_variant(record: dict) -> dict:
+    price = record.get("contextualPricing", {}).get("price", {})
+    if price.get("currencyCode") != CURRENCY:
+        raise ValueError("Variant contextual price is not EUR")
+    weight = record.get("inventoryItem", {}).get("measurement", {}).get("weight")
+    if not weight:
+        raise ValueError("Missing variant weight")
+    unit_map = {
+        "GRAMS": "g",
+        "KILOGRAMS": "kg",
+        "OUNCES": "oz",
+        "POUNDS": "lb",
+    }
+    unit = unit_map.get(weight.get("unit"))
+    if not unit:
+        raise ValueError("Unsupported Shopify weight unit")
+    return {
+        "id": int(record["legacyResourceId"]),
+        "price": money_to_cents(price.get("amount")),
+        "available": bool(record.get("availableForSale")),
+        "barcode": record.get("barcode"),
+        "sku": record.get("sku"),
+        "options": record.get("selectedOptions", []),
+        "weight": weight.get("value"),
+        "weight_unit": unit,
+    }
+
+
+def load_bulk_products(url: str, expected_products: int) -> tuple[list[tuple[Candidate, dict]], dict]:
+    products: dict[str, dict] = {}
+    order: list[str] = []
+    request = urllib.request.Request(url, headers={"User-Agent": "FinnmartSpainFeed/2.0"})
+    try:
+        response = urllib.request.urlopen(request, timeout=120)
+    except urllib.error.URLError:
+        raise RuntimeError("Unable to download Shopify bulk result") from None
+    with response:
+        for line_number, raw_line in enumerate(response, 1):
+            if len(raw_line) > 16 * 1024 * 1024:
+                raise RuntimeError("Oversized Shopify bulk JSONL record")
+            try:
+                record = json.loads(raw_line)
+            except json.JSONDecodeError:
+                raise RuntimeError(f"Invalid Shopify bulk JSONL at line {line_number}") from None
+            kind = record.get("__typename")
+            if kind == "Product" or (
+                not record.get("__parentId")
+                and str(record.get("id", "")).startswith("gid://shopify/Product/")
+            ):
+                product_id = record["id"]
+                record["_images"] = []
+                record["_variants"] = []
+                products[product_id] = record
+                order.append(product_id)
+                continue
+            parent_id = record.get("__parentId")
+            parent = products.get(parent_id)
+            if not parent:
+                raise RuntimeError("Shopify bulk child appeared without its product")
+            if kind == "MediaImage":
+                image_url = record.get("image", {}).get("url")
+                if image_url and len(parent["_images"]) < 11:
+                    parent["_images"].append(image_url)
+            elif kind == "ProductVariant":
+                parent["_variants"].append(record)
+    if len(products) != expected_products:
+        raise RuntimeError(
+            f"Shopify bulk root count mismatch: expected {expected_products}, received {len(products)}"
+        )
+
+    rows: list[tuple[Candidate, dict]] = []
+    skipped = {
+        "inactive": 0,
+        "unapproved_supplier": 0,
+        "missing_spanish": 0,
+        "invalid_product": 0,
+    }
+    invalid: list[dict] = []
+    for product_id in order:
+        record = products[product_id]
+        if record.get("status") != "ACTIVE":
+            skipped["inactive"] += 1
+            continue
+        supplier = supplier_from_tags(record.get("tags", []))
+        if not supplier:
+            skipped["unapproved_supplier"] += 1
+            continue
+        translations = {row["key"]: row.get("value") for row in record.get("translations", [])}
+        if not REQUIRED_TRANSLATIONS.issubset(
+            {key for key, value in translations.items() if clean_text(value)}
+        ):
+            skipped["missing_spanish"] += 1
+            continue
+        handle = clean_text(translations["handle"])
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", handle):
+            skipped["invalid_product"] += 1
+            invalid.append({"product_id": product_id, "error": "unsafe Spanish handle"})
+            continue
+        try:
+            variants = [bulk_variant(row) for row in record["_variants"]]
+        except (KeyError, TypeError, ValueError) as exc:
+            skipped["invalid_product"] += 1
+            invalid.append({"product_id": product_id, "handle": handle, "error": str(exc)})
+            continue
+        if not variants:
+            skipped["invalid_product"] += 1
+            invalid.append({"product_id": product_id, "handle": handle, "error": "no variants"})
+            continue
+        candidate = Candidate(numeric_gid(product_id), handle, supplier)
+        rows.append((candidate, {
+            "id": candidate.product_id,
+            "handle": handle,
+            "title": translations["title"],
+            "description": translations["body_html"],
+            "type": translations["product_type"],
+            "vendor": record.get("vendor"),
+            "images": record["_images"],
+            "variants": variants,
+        }))
+    return rows, {"skipped": skipped, "invalid_products": invalid}
+
+
+def latest_completed_bulk(api: Shopify) -> dict:
+    operations = api.call(RECENT_BULK_QUERY, {})["bulkOperations"]["nodes"]
+    for operation in operations:
+        if operation.get("status") == "COMPLETED" and operation.get("url"):
+            print(f"Reusing completed bulk operation {operation['id']}", flush=True)
+            return operation
+    raise RuntimeError("No reusable completed Shopify bulk operation found")
+
+
+def bulk_catalog_products(api: Shopify, reuse_latest: bool = False) -> tuple[list[tuple[Candidate, dict]], dict]:
+    catalog = catalog_metadata(api)
+    operation = latest_completed_bulk(api) if reuse_latest else run_bulk_query(api)
+    rows, report = load_bulk_products(operation["url"], catalog["included_products"])
+    catalog.update(report)
+    catalog["bulk_operation"] = {
+        key: operation.get(key)
+        for key in ("id", "status", "objectCount", "rootObjectCount", "fileSize")
+    }
+    return rows, catalog
+
+
 def catalog_candidates(api: Shopify) -> tuple[list[Candidate], dict]:
     after = None
     candidates: list[Candidate] = []
@@ -326,13 +654,28 @@ def add_shipping(item: ET.Element, grams: int) -> None:
     child(shipping, "max_transit_time", SHIPPING_MAX_DAYS)
 
 
-def add_product(channel: ET.Element, candidate: Candidate, product: dict) -> int:
+def add_product(
+    channel: ET.Element,
+    candidate: Candidate,
+    product: dict,
+    report: dict | None = None,
+) -> int:
     title = clean_text(product.get("title"), 150)
     description = clean_text(product.get("description"), 5000)
     product_type = clean_text(product.get("type"))
     images = [https_url(value) for value in product.get("images", []) if value]
     if not title or not description or not product_type or not images:
-        raise ValueError("Missing required Spanish content")
+        missing = [
+            name
+            for name, value in (
+                ("title", title),
+                ("description", description),
+                ("product_type", product_type),
+                ("images", images),
+            )
+            if not value
+        ]
+        raise ValueError("Missing required feed content: " + ",".join(missing))
     option_names = [
         clean_text(value.get("name") if isinstance(value, dict) else value).casefold()
         for value in product.get("options", [])
@@ -343,7 +686,14 @@ def add_product(channel: ET.Element, candidate: Candidate, product: dict) -> int
         price = int(variant["price"])
         if price <= 0:
             raise ValueError("Non-positive price")
-        grams = variant_weight_grams(variant)
+        try:
+            grams = variant_weight_grams(variant)
+        except ValueError:
+            grams = 1000
+            if report is not None:
+                report["weight_fallback_items"] = report.get("weight_fallback_items", 0) + 1
+                by_supplier = report.setdefault("weight_fallback_by_supplier", {})
+                by_supplier[candidate.supplier] = by_supplier.get(candidate.supplier, 0) + 1
         item = ET.SubElement(channel, "item")
         child(item, "id", f"shopify_{COUNTRY}_{candidate.product_id}_{variant_id}")
         child(item, "title", title)
@@ -391,40 +741,23 @@ def previous_product_count(summary_path: Path) -> int | None:
         return None
 
 
-def build(secret: str, out: Path, summary_path: Path, workers: int, minimum_products: int) -> dict:
+def build(
+    secret: str,
+    out: Path,
+    summary_path: Path,
+    workers: int,
+    minimum_products: int,
+    reuse_latest_bulk: bool = False,
+) -> dict:
     started = time.time()
     api = Shopify(secret)
-    candidates, catalog = catalog_candidates(api)
-    if len(candidates) < minimum_products:
-        raise RuntimeError(f"Safety stop: only {len(candidates)} eligible Market products")
+    successes, catalog = bulk_catalog_products(api, reuse_latest=reuse_latest_bulk)
+    if len(successes) < minimum_products:
+        raise RuntimeError(f"Safety stop: only {len(successes)} eligible Market products")
     previous = previous_product_count(summary_path)
-    if previous and len(candidates) < previous * 0.90:
+    if previous and len(successes) < previous * 0.90:
         raise RuntimeError("Safety stop: Market product count fell by more than 10%")
-
-    successes: list[tuple[Candidate, dict]] = []
-    failures: list[dict] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        future_map = {pool.submit(fetch_product, candidate): candidate for candidate in candidates}
-        for completed, future in enumerate(concurrent.futures.as_completed(future_map), 1):
-            candidate = future_map[future]
-            try:
-                successes.append(future.result())
-            except Exception as exc:
-                failures.append({
-                    "product_id": candidate.product_id,
-                    "handle": candidate.handle,
-                    "supplier": candidate.supplier,
-                    "error": str(exc),
-                })
-            if completed % 500 == 0 or completed == len(candidates):
-                print(
-                    f"Storefront validation {completed}/{len(candidates)}: "
-                    f"ok={len(successes)} failed={len(failures)}",
-                    flush=True,
-                )
     successes.sort(key=lambda row: row[0].product_id)
-    if len(successes) < minimum_products or len(failures) > max(25, round(len(candidates) * 0.01)):
-        raise RuntimeError(f"Safety stop: {len(failures)} storefront fetch failures")
 
     rss = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(rss, "channel")
@@ -433,9 +766,41 @@ def build(secret: str, out: Path, summary_path: Path, workers: int, minimum_prod
     ET.SubElement(channel, "description").text = "Shopify Market synchronized feed for Spain"
     item_count = 0
     suppliers = {"NovaEngel": 0, "Royal Textile": 0}
+    built_products = 0
+    build_failures: list[dict] = []
+    fallback_report = {
+        "weight_fallback_items": 0,
+        "weight_fallback_by_supplier": {"NovaEngel": 0, "Royal Textile": 0},
+    }
     for candidate, product in successes:
-        item_count += add_product(channel, candidate, product)
+        previous_children = len(channel)
+        try:
+            item_count += add_product(channel, candidate, product, fallback_report)
+        except (KeyError, TypeError, ValueError) as exc:
+            del channel[previous_children:]
+            build_failures.append({
+                "product_id": candidate.product_id,
+                "handle": candidate.handle,
+                "supplier": candidate.supplier,
+                "error": str(exc),
+            })
+            continue
         suppliers[candidate.supplier] += 1
+        built_products += 1
+    missing_image_failures = [
+        row for row in build_failures
+        if row["error"] == "Missing required feed content: images"
+    ]
+    unexpected_failures = [
+        row for row in build_failures
+        if row["error"] != "Missing required feed content: images"
+    ]
+    if unexpected_failures or len(missing_image_failures) > round(len(successes) * 0.02):
+        print(json.dumps({
+            "build_failure_counts": Counter(row["error"] for row in build_failures),
+            "build_failure_samples": build_failures[:20],
+        }, ensure_ascii=False, indent=2), flush=True)
+        raise RuntimeError(f"Safety stop: {len(build_failures)} product build failures")
     if not all(suppliers.values()):
         raise RuntimeError("Both approved suppliers must be present")
 
@@ -460,11 +825,13 @@ def build(secret: str, out: Path, summary_path: Path, workers: int, minimum_prod
         "shop": SHOP,
         "market_id": MARKET_ID,
         **catalog,
-        "eligible_products": len(candidates),
-        "products": len(successes),
+        "eligible_products": len(successes),
+        "products": built_products,
         "items": item_count,
         "suppliers": suppliers,
-        "fetch_failures": failures,
+        "build_failures": build_failures,
+        "excluded_missing_images": len(missing_image_failures),
+        **fallback_report,
         "shipping": {
             "service": SHIPPING_SERVICE,
             "delivery_days": "3-5",
@@ -478,17 +845,109 @@ def build(secret: str, out: Path, summary_path: Path, workers: int, minimum_prod
     return summary
 
 
+def diagnose(secret: str, workers: int, limit: int) -> dict:
+    """Inspect a bounded, evenly distributed storefront sample without writing a feed."""
+    api = Shopify(secret)
+    candidates, catalog = catalog_candidates(api)
+    if not candidates:
+        raise RuntimeError("Catalog has no eligible Spanish products")
+    sample_size = min(limit, len(candidates))
+    if sample_size == 1:
+        sample = [candidates[0]]
+    else:
+        sample = [
+            candidates[round(index * (len(candidates) - 1) / (sample_size - 1))]
+            for index in range(sample_size)
+        ]
+    successes = 0
+    failures: list[dict] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        future_map = {pool.submit(fetch_product, candidate): candidate for candidate in sample}
+        for future in concurrent.futures.as_completed(future_map):
+            candidate = future_map[future]
+            try:
+                future.result()
+                successes += 1
+            except Exception as exc:
+                failures.append({
+                    "product_id": candidate.product_id,
+                    "handle": candidate.handle,
+                    "supplier": candidate.supplier,
+                    "error": str(exc),
+                })
+    result = {
+        "catalog": catalog,
+        "eligible_products": len(candidates),
+        "sampled": sample_size,
+        "successes": successes,
+        "failures": failures,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
+
+
+def bulk_probe(secret: str) -> dict:
+    api = Shopify(secret)
+    data = api.call(BULK_PRODUCT_PROBE_QUERY, {
+        "publicationId": "gid://shopify/Publication/327947911492",
+    })
+    products = data.get("publication", {}).get("includedProducts", {}).get("nodes", [])
+    if len(products) != 1:
+        raise RuntimeError("Bulk field probe did not return exactly one product")
+    product = products[0]
+    translations = {row["key"]: bool(clean_text(row.get("value"))) for row in product["translations"]}
+    result = {
+        "product_id": product["id"],
+        "status": product["status"],
+        "translations": translations,
+        "media_count": len(product["media"]["edges"]),
+        "variant_count_in_probe": len(product["variants"]["edges"]),
+        "variant_sample": [row["node"] for row in product["variants"]["edges"][:1]],
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
+
+
+def recent_bulk_status(secret: str) -> list[dict]:
+    api = Shopify(secret)
+    operations = api.call(RECENT_BULK_QUERY, {})["bulkOperations"]["nodes"]
+    print(json.dumps(operations, ensure_ascii=False, indent=2))
+    return operations
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=Path("public/finnmart-es.xml"))
     parser.add_argument("--summary", type=Path, default=Path("public/finnmart-es-summary.json"))
     parser.add_argument("--workers", type=int, default=16)
     parser.add_argument("--minimum-products", type=int, default=10_000)
+    parser.add_argument("--diagnose-limit", type=int, default=0)
+    parser.add_argument("--bulk-probe", action="store_true")
+    parser.add_argument("--bulk-status", action="store_true")
+    parser.add_argument("--reuse-latest-bulk", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.workers <= 32:
         raise SystemExit("workers must be between 1 and 32")
     secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "")
-    result = build(secret, args.out, args.summary, args.workers, args.minimum_products)
+    if args.bulk_probe:
+        bulk_probe(secret)
+        return
+    if args.bulk_status:
+        recent_bulk_status(secret)
+        return
+    if args.diagnose_limit:
+        if args.diagnose_limit < 1:
+            raise SystemExit("diagnose limit must be positive")
+        diagnose(secret, args.workers, args.diagnose_limit)
+        return
+    result = build(
+        secret,
+        args.out,
+        args.summary,
+        args.workers,
+        args.minimum_products,
+        reuse_latest_bulk=args.reuse_latest_bulk,
+    )
     print(json.dumps({
         key: result[key]
         for key in ("status", "products", "items", "suppliers", "xml_sha256", "duration_seconds")
