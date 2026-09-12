@@ -17,8 +17,7 @@ class FinlandPilotTests(unittest.TestCase):
             "category": {"fullName": "Home & Garden > Linens & Bedding > Bedding > Bed Sheets"},
             "media": {"nodes": [{"__typename": "MediaImage", "image": {"url": "https://cdn.example.test/a.jpg"}}]},
             "metafields": {"nodes": [
-                {"namespace": "mm-google-shopping", "key": "custom_label_0", "value": "Royal Textile"},
-                {"namespace": "mm-google-shopping", "key": "custom_label_1", "value": "G0039"},
+                {"namespace": "mm-google-shopping", "key": "custom_label_1", "value": "PRODUCT-WRONG"},
             ]},
             "variants": {"pageInfo": {"hasNextPage": False}, "nodes": [{
                 "id": "gid://shopify/ProductVariant/456",
@@ -29,6 +28,10 @@ class FinlandPilotTests(unittest.TestCase):
                 "compareAtPrice": "60.60",
                 "availableForSale": True,
                 "selectedOptions": [{"name": "Koko", "value": "80x200"}],
+                "metafields": {"nodes": [
+                    {"namespace": "mm-google-shopping", "key": "custom_label_0", "value": "Royal Textile"},
+                    {"namespace": "mm-google-shopping", "key": "custom_label_1", "value": "G0039"},
+                ]},
                 "inventoryItem": {
                     "unitCost": {"amount": "10.25", "currencyCode": "EUR"},
                     "measurement": {"weight": {"value": 1000, "unit": "GRAMS"}},
@@ -60,6 +63,14 @@ class FinlandPilotTests(unittest.TestCase):
         destinations = [node.text for node in item.findall(f"{{{feed.G}}}excluded_destination")]
         self.assertEqual(destinations, list(feed.EXCLUDED_DESTINATIONS))
         self.assertEqual(value("pause"), "all")
+
+    def test_labels_are_never_inherited_from_product(self):
+        product = self.sample_product()
+        product["variants"]["nodes"][0]["metafields"] = {"nodes": []}
+        channel = ET.Element("channel")
+        feed.add_product(channel, "Royal Textile", product, self.empty_report())
+        item = channel.find("item")
+        self.assertIsNone(item.find(f"{{{feed.G}}}custom_label_1"))
 
     def test_invalid_weight_uses_one_kilogram(self):
         product = self.sample_product()

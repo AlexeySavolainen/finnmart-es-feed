@@ -98,6 +98,9 @@ PRODUCT_QUERY = """query FinlandPilotProducts($first: Int!, $query: String!) {
           compareAtPrice
           availableForSale
           selectedOptions { name value }
+          metafields(first: 100) {
+            nodes { namespace key type value }
+          }
           inventoryItem {
             unitCost { amount currencyCode }
             measurement { weight { value unit } }
@@ -129,9 +132,9 @@ def numeric_gid(value: str) -> int:
     return int(number)
 
 
-def google_metafields(product: dict) -> dict[str, str]:
+def google_metafields(resource: dict) -> dict[str, str]:
     values: dict[str, str] = {}
-    for row in product.get("metafields", {}).get("nodes", []):
+    for row in resource.get("metafields", {}).get("nodes", []):
         if row.get("namespace") != GOOGLE_NAMESPACE:
             continue
         value = clean_text(row.get("value"))
@@ -211,6 +214,7 @@ def add_product(channel: ET.Element, supplier: str, product: dict, report: dict)
     category = category or PRODUCT_TYPE_CATEGORY_FALLBACKS.get(product_type.casefold(), "")
     item_count = 0
     for variant in variants["nodes"]:
+        variant_metafields = google_metafields(variant)
         variant_id = numeric_gid(variant["id"])
         current = decimal_money(variant.get("price"))
         if not current:
@@ -270,9 +274,9 @@ def add_product(channel: ET.Element, supplier: str, product: dict, report: dict)
 
         add_option_fields(item, variant, metafields)
         for key in LABEL_KEYS:
-            if metafields.get(key):
-                child(item, key, metafields[key])
-                report["labels"][key][metafields[key]] += 1
+            if variant_metafields.get(key):
+                child(item, key, variant_metafields[key])
+                report["labels"][key][variant_metafields[key]] += 1
         for key in PASSTHROUGH_FIELDS:
             if key not in OPTION_FIELDS and key != "condition" and metafields.get(key):
                 child(item, key, metafields[key])

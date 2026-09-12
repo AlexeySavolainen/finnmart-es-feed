@@ -28,6 +28,9 @@ Pilot validation and field-coverage report:
 
 `/vuodevaatteet-fi-pilot-summary.json`
 
+Google custom labels 0–4 are read at variant level and never inherited from the
+parent Shopify product.
+
 The current Simprosys/GMC field audit and label findings are documented in
 `FI_FEED_FIELD_AUDIT.md`.
 
