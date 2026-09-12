@@ -2,6 +2,11 @@
 
 Prepared on 2026-09-12 for Merchant Center account `5052901478`.
 
+Status: production cutover completed on 2026-09-12. The active own source is
+`Vuodevaatteet FI – Own Production`, ID `10728562355`. Its first fetch updated
+126,725 offers, added six, recognized every attribute, and reported no file
+errors. This document now also serves as the rollback and observation runbook.
+
 ## Decision
 
 Use a direct, non-overlapping replacement of the current Simprosys Merchant API

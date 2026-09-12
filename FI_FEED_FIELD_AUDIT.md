@@ -2,6 +2,24 @@
 
 Audit date: 2026-09-12. Merchant Center account: `5052901478`.
 
+## Live replacement status
+
+The production cutover completed on 2026-09-12. The old Simprosys source
+`10654636924` was removed and replaced by the scheduled URL source
+`Vuodevaatteet FI – Own Production`, ID `10728562355`.
+
+- Country/language/feed label: Finland / Finnish / `FI`
+- Marketing methods: Free listings and Shopping ads
+- Scheduled fetch: every 24 hours at 06:00 Europe/Helsinki, after the GitHub build
+- First fetch: 126,725 offers updated, six new, all attributes recognized
+- Source-file errors: none
+- Verified Royal Textile offer: approved, visible on Google and in ads; Finnish
+  landing page, price/sale price, GTIN/MPN, availability, variant size, and all
+  five variant labels were correct
+
+The isolated `FI-PILOT` source remains paused and separate during the observation
+period. The Simprosys subscription has not been cancelled, preserving rollback.
+
 ## Current Simprosys source
 
 - Source: `Simprosys Feed (Merchant API)`, ID `10654636924`

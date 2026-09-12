@@ -1,4 +1,4 @@
-name: Sync Finnmart Spain feed
+name: Sync Finnmart Spain and Finland feeds
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: finnmart-spain-feed
+  group: finnmart-product-feeds
   cancel-in-progress: false
 
 jobs:
