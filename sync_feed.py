@@ -182,8 +182,9 @@ class Shopify:
             raise RuntimeError(f"Shopify token exchange failed with HTTP {exc.code}") from None
         scopes = set(payload.get("scope", "").split(","))
         effective = scopes | ({"read_translations"} if "write_translations" in scopes else set())
-        if not {"read_products", "read_translations"}.issubset(effective):
-            raise RuntimeError("Shopify app lacks read_products/read_translations")
+        required = {"read_products", "read_publications", "read_translations"}
+        if not required.issubset(effective):
+            raise RuntimeError("Shopify app lacks read_products/read_publications/read_translations")
         return payload["access_token"]
 
     def call(self, query: str, variables: dict) -> dict:
@@ -229,7 +230,9 @@ def catalog_candidates(api: Shopify) -> tuple[list[Candidate], dict]:
     skipped = {"inactive": 0, "unapproved_supplier": 0, "missing_spanish": 0}
     expected = None
     publication_id = None
+    page_number = 0
     while True:
+        page_number += 1
         data = api.call(CATALOG_QUERY, {"id": CATALOG_ID, "after": after})
         catalog = data.get("catalog")
         if not catalog:
@@ -261,6 +264,11 @@ def catalog_candidates(api: Shopify) -> tuple[list[Candidate], dict]:
             if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", handle):
                 raise RuntimeError(f"Unsafe Spanish handle for {product['id']}")
             candidates.append(Candidate(numeric_gid(product["id"]), handle, supplier))
+        print(
+            f"Catalog page {page_number}: eligible={len(candidates)} "
+            f"included={expected}",
+            flush=True,
+        )
         if not page["pageInfo"]["hasNextPage"]:
             break
         following = page["pageInfo"]["endCursor"]
@@ -397,7 +405,7 @@ def build(secret: str, out: Path, summary_path: Path, workers: int, minimum_prod
     failures: list[dict] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         future_map = {pool.submit(fetch_product, candidate): candidate for candidate in candidates}
-        for future in concurrent.futures.as_completed(future_map):
+        for completed, future in enumerate(concurrent.futures.as_completed(future_map), 1):
             candidate = future_map[future]
             try:
                 successes.append(future.result())
@@ -408,6 +416,12 @@ def build(secret: str, out: Path, summary_path: Path, workers: int, minimum_prod
                     "supplier": candidate.supplier,
                     "error": str(exc),
                 })
+            if completed % 500 == 0 or completed == len(candidates):
+                print(
+                    f"Storefront validation {completed}/{len(candidates)}: "
+                    f"ok={len(successes)} failed={len(failures)}",
+                    flush=True,
+                )
     successes.sort(key=lambda row: row[0].product_id)
     if len(successes) < minimum_products or len(failures) > max(25, round(len(candidates) * 0.01)):
         raise RuntimeError(f"Safety stop: {len(failures)} storefront fetch failures")
