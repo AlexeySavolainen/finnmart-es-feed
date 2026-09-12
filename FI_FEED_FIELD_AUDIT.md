@@ -60,3 +60,41 @@ Shopify taxonomy or the `mm-google-shopping.google_product_category` metafield
 is used first. NovaEngel perfume products without either value receive the
 official Google category `479` (Perfume & Cologne), avoiding an avoidable
 category gap without guessing categories for unrelated product types.
+
+## Complete production candidate
+
+The first complete candidate was generated and validated on 2026-09-12. It is
+not connected to Merchant Center.
+
+| Metric | Own candidate | Current Simprosys/GMC comparison |
+|---|---:|---:|
+| Active and published Shopify products read | 125,516 | Simprosys UI audit: 125,517 |
+| Products emitted | 124,844 | Products without a usable offer are excluded |
+| Variant offers | 126,725 | GMC audit: 126,720 |
+| Unique, parsed offer IDs | 126,725 | Difference from GMC: +5 (0.004%) |
+| Offers with valid GTIN | 125,119 | Invalid non-empty GTIN values: 1,349 |
+| Offers with MPN/SKU | 126,436 | — |
+| Offers with COGS | 126,723 | Missing: 2 |
+| Offers with Google category | 87,592 | Missing: 39,133 |
+| Offers with sale price | 69,961 | — |
+| 1 kg weight fallbacks | 10,629 | Explicitly approved fallback |
+| Description fallbacks | 6 | Finnish deterministic template |
+
+The candidate excluded 676 product/variant rows without a required title,
+handle, or image and four variants without a positive price. This is consistent
+with the near-identical final offer count: the current GMC source also cannot
+publish unusable offers. The one-product difference in the Shopify scope and
+five-offer difference are within normal catalog movement during two audits, but
+must be checked again immediately before cutover.
+
+All 126,725 offers have `custom_label_0`. Missing variant labels are:
+
+- `custom_label_1`: 18,876
+- `custom_label_2`: 664
+- `custom_label_3`: 16,912
+- `custom_label_4`: 16,900
+
+These are real empty variant metafields and are not filled from the parent
+product. The generated report preserves every observed value and its count.
+The production candidate has no `pause` or destination exclusions, but remains
+safe because its URL has not been connected to Merchant Center.
