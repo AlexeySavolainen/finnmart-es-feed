@@ -45,6 +45,7 @@ ET.register_namespace("g", G)
 TARGETS = {
     "ES": {
         "locale": "es", "country": "ES", "name": "Spain",
+        "path_prefix": "/es",
         "feed_title": "Finnmart Spain Market feed",
         "feed_description": "Shopify Market synchronized feed for Spain",
         "shipping_service": "Entrega estándar (3–5 días laborables)",
@@ -55,6 +56,9 @@ TARGETS = {
     },
     "IE": {
         "locale": "en", "country": "IE", "name": "Ireland",
+        # English is the default language of finnmart.eu, so Shopify serves it
+        # at the root rather than below a non-existent /en/ prefix.
+        "path_prefix": "",
         "feed_title": "Finnmart Ireland Market feed",
         "feed_description": "Shopify Market synchronized feed for Ireland",
         "shipping_service": "Standard delivery (5–8 business days)",
@@ -131,7 +135,7 @@ def translated_bulk_fields(locale: str, country: str) -> str:
 
 
 def configure_target(country: str) -> None:
-    global LOCALE, COUNTRY, TARGET_NAME, FEED_TITLE, FEED_DESCRIPTION
+    global LOCALE, COUNTRY, TARGET_NAME, PATH_PREFIX, FEED_TITLE, FEED_DESCRIPTION
     global SHIPPING_SERVICE, SHIPPING_MIN_DAYS, SHIPPING_MAX_DAYS, SHIPPING_BANDS
     global DEFAULT_OUT, DEFAULT_SUMMARY, USER_AGENT
     global CATALOG_QUERY, BULK_PRODUCT_FIELDS, BULK_PRODUCT_PROBE_FIELDS
@@ -140,6 +144,7 @@ def configure_target(country: str) -> None:
     LOCALE = config["locale"]
     COUNTRY = config["country"]
     TARGET_NAME = config["name"]
+    PATH_PREFIX = config["path_prefix"]
     FEED_TITLE = config["feed_title"]
     FEED_DESCRIPTION = config["feed_description"]
     SHIPPING_SERVICE = config["shipping_service"]
@@ -674,7 +679,7 @@ def catalog_candidates(api: Shopify) -> tuple[list[Candidate], dict]:
 
 def fetch_product(candidate: Candidate) -> tuple[Candidate, dict]:
     quoted = urllib.parse.quote(candidate.handle, safe="-._~")
-    url = f"{STORE}/{LOCALE}/products/{quoted}.js"
+    url = f"{STORE}{PATH_PREFIX}/products/{quoted}.js"
     request = urllib.request.Request(url, headers={
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
@@ -754,7 +759,7 @@ def add_product(
         child(item, "id", f"shopify_{COUNTRY}_{candidate.product_id}_{variant_id}")
         child(item, "title", title)
         child(item, "description", description)
-        child(item, "link", f"{STORE}/{LOCALE}/products/{candidate.handle}?variant={variant_id}")
+        child(item, "link", f"{STORE}{PATH_PREFIX}/products/{candidate.handle}?variant={variant_id}")
         child(item, "image_link", images[0])
         for image in images[1:11]:
             child(item, "additional_image_link", image)
@@ -818,7 +823,7 @@ def build(
     rss = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = FEED_TITLE
-    ET.SubElement(channel, "link").text = f"{STORE}/{LOCALE}/"
+    ET.SubElement(channel, "link").text = f"{STORE}{PATH_PREFIX}/"
     ET.SubElement(channel, "description").text = FEED_DESCRIPTION
     item_count = 0
     suppliers = {"NovaEngel": 0, "Royal Textile": 0}
@@ -869,7 +874,7 @@ def build(
         raise RuntimeError("Final item validation failed")
     if any(not value.startswith(f"shopify_{COUNTRY}_") for value in ids):
         raise RuntimeError("Unexpected offer ID prefix")
-    if any(not value.startswith(f"{STORE}/{LOCALE}/products/") for value in links):
+    if any(not value.startswith(f"{STORE}{PATH_PREFIX}/products/") for value in links):
         raise RuntimeError("Unexpected landing page locale")
     if len(parsed.findall(f"./channel/item/{{{G}}}shipping")) != item_count:
         raise RuntimeError("Shipping is missing from one or more offers")

@@ -25,6 +25,7 @@ class SyncFeedTests(unittest.TestCase):
         feed.configure_target("IE")
         self.assertEqual(feed.LOCALE, "en")
         self.assertEqual(feed.COUNTRY, "IE")
+        self.assertEqual(feed.PATH_PREFIX, "")
         self.assertEqual(feed.shipping_price(500), "11.50 EUR")
         self.assertEqual(feed.shipping_price(2000), "11.50 EUR")
         self.assertEqual(feed.shipping_price(2001), "16.65 EUR")
@@ -59,7 +60,7 @@ class SyncFeedTests(unittest.TestCase):
         }
         self.assertEqual(item.find(f"{{{feed.G}}}id").text, "shopify_IE_123_456")
         self.assertEqual(item.find(f"{{{feed.G}}}link").text,
-                         "https://finnmart.eu/en/products/english-product?variant=456")
+                         "https://finnmart.eu/products/english-product?variant=456")
         self.assertEqual(values["country"], "IE")
         self.assertEqual(values["price"], "24.15 EUR")
         self.assertEqual(values["min_transit_time"], "5")
