@@ -20,6 +20,14 @@ Machine-readable validation report:
 
 `/finnmart-es-summary.json`
 
+Ireland English feed endpoint:
+
+`/finnmart-ie.xml`
+
+Ireland validation report:
+
+`/finnmart-ie-summary.json`
+
 Finland replacement pilot (100 Shopify products, isolated from live ads):
 
 `/vuodevaatteet-fi-pilot.xml`
@@ -60,6 +68,7 @@ translations, and exports the exact catalog with Shopify Bulk GraphQL. It then
 validates unique Spanish offer IDs, localized landing pages, required fields,
 shipping details, supplier coverage, and safety thresholds before publishing.
 
-The scheduled GitHub Actions workflow builds the full feed daily and deploys the
+The scheduled GitHub Actions workflow builds the full Spain and Ireland feeds
+daily and deploys the
 `public` directory to GitHub Pages without committing generated XML files to Git
 history. The required repository secret is `SHOPIFY_CLIENT_SECRET`.

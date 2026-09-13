@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Synchronize the Spain Merchant feed from one Shopify Market catalog.
+"""Synchronize a localized Merchant feed from one Shopify Market catalog.
 
 The script is intentionally read-only against Shopify. It resolves the exact
-MarketCatalog publication, requires reviewed Spanish translations, exports the
-catalog through Shopify Bulk GraphQL, validates the complete result and only
-then atomically replaces the public XML file.
+MarketCatalog publication, requires reviewed translations for the selected
+target, exports the catalog through Shopify Bulk GraphQL, validates the complete
+result and only then atomically replaces the public XML file.
 """
 from __future__ import annotations
 
@@ -36,22 +36,43 @@ MARKET_ID = "106799857988"
 MARKET_GID = f"gid://shopify/Market/{MARKET_ID}"
 PUBLICATION_ID = "gid://shopify/Publication/327947911492"
 STORE = "https://finnmart.eu"
-LOCALE = "es"
-COUNTRY = "ES"
 CURRENCY = "EUR"
 G = "http://base.google.com/ns/1.0"
-SHIPPING_SERVICE = "Entrega estándar (3–5 días laborables)"
-SHIPPING_MIN_DAYS = 3
-SHIPPING_MAX_DAYS = 5
-SHIPPING_LIGHT_MAX_GRAMS = 10_000
 SHIPPING_MAX_GRAMS = 20_000
-SHIPPING_LIGHT_PRICE = "11.50 EUR"
-SHIPPING_HEAVY_PRICE = "13.10 EUR"
 REQUIRED_TRANSLATIONS = {"title", "body_html", "handle", "product_type"}
 ET.register_namespace("g", G)
 
+TARGETS = {
+    "ES": {
+        "locale": "es", "country": "ES", "name": "Spain",
+        "feed_title": "Finnmart Spain Market feed",
+        "feed_description": "Shopify Market synchronized feed for Spain",
+        "shipping_service": "Entrega estándar (3–5 días laborables)",
+        "shipping_min_days": 3, "shipping_max_days": 5,
+        "shipping_bands": ((10_000, "11.50 EUR"), (20_000, "13.10 EUR")),
+        "default_out": "public/finnmart-es.xml",
+        "default_summary": "public/finnmart-es-summary.json",
+    },
+    "IE": {
+        "locale": "en", "country": "IE", "name": "Ireland",
+        "feed_title": "Finnmart Ireland Market feed",
+        "feed_description": "Shopify Market synchronized feed for Ireland",
+        "shipping_service": "Standard delivery (5–8 business days)",
+        "shipping_min_days": 5, "shipping_max_days": 8,
+        # Exact Shopify General profile rates for Ireland on 13 September 2026.
+        "shipping_bands": (
+            (500, "11.50 EUR"), (2_000, "11.50 EUR"),
+            (5_000, "16.65 EUR"), (10_000, "24.15 EUR"),
+            (15_000, "30.70 EUR"), (20_000, "32.15 EUR"),
+        ),
+        "default_out": "public/finnmart-ie.xml",
+        "default_summary": "public/finnmart-ie-summary.json",
+    },
+}
 
-CATALOG_QUERY = """query CatalogProducts($id: ID!, $after: String) {
+
+def translated_catalog_query(locale: str) -> str:
+    return '''query CatalogProducts($id: ID!, $after: String) {
   catalog(id: $id) {
     __typename
     id
@@ -67,20 +88,22 @@ CATALOG_QUERY = """query CatalogProducts($id: ID!, $after: String) {
           handle
           status
           tags
-          translations(locale: \"es\") { key value }
+          translations(locale: "__LOCALE__") { key value }
         }
       }
     }
   }
-}"""
+}'''.replace("__LOCALE__", locale)
 
-BULK_PRODUCT_FIELDS = """
+
+def translated_bulk_fields(locale: str, country: str) -> str:
+    return '''
   id
   __typename
   status
   tags
   vendor
-  translations(locale: "es") { key value }
+  translations(locale: "__LOCALE__") { key value }
   media {
     edges { node {
       __typename
@@ -96,7 +119,7 @@ BULK_PRODUCT_FIELDS = """
       barcode
       sku
       selectedOptions { name value }
-      contextualPricing(context: {country: ES}) {
+      contextualPricing(context: {country: __COUNTRY__}) {
         price { amount currencyCode }
       }
       inventoryItem {
@@ -104,15 +127,34 @@ BULK_PRODUCT_FIELDS = """
       }
     } }
   }
-"""
+'''.replace("__LOCALE__", locale).replace("__COUNTRY__", country)
 
-BULK_PRODUCT_PROBE_FIELDS = BULK_PRODUCT_FIELDS.replace(
-    "  media {", "  media(first: 10) {"
-).replace(
-    "  variants {", "  variants(first: 100) {"
-)
 
-BULK_PRODUCT_PROBE_QUERY = """query BulkProductProbe($publicationId: ID!) {
+def configure_target(country: str) -> None:
+    global LOCALE, COUNTRY, TARGET_NAME, FEED_TITLE, FEED_DESCRIPTION
+    global SHIPPING_SERVICE, SHIPPING_MIN_DAYS, SHIPPING_MAX_DAYS, SHIPPING_BANDS
+    global DEFAULT_OUT, DEFAULT_SUMMARY, USER_AGENT
+    global CATALOG_QUERY, BULK_PRODUCT_FIELDS, BULK_PRODUCT_PROBE_FIELDS
+    global BULK_PRODUCT_PROBE_QUERY
+    config = TARGETS[country]
+    LOCALE = config["locale"]
+    COUNTRY = config["country"]
+    TARGET_NAME = config["name"]
+    FEED_TITLE = config["feed_title"]
+    FEED_DESCRIPTION = config["feed_description"]
+    SHIPPING_SERVICE = config["shipping_service"]
+    SHIPPING_MIN_DAYS = config["shipping_min_days"]
+    SHIPPING_MAX_DAYS = config["shipping_max_days"]
+    SHIPPING_BANDS = config["shipping_bands"]
+    DEFAULT_OUT = Path(config["default_out"])
+    DEFAULT_SUMMARY = Path(config["default_summary"])
+    USER_AGENT = f"Finnmart{TARGET_NAME}Feed/2.0"
+    CATALOG_QUERY = translated_catalog_query(LOCALE)
+    BULK_PRODUCT_FIELDS = translated_bulk_fields(LOCALE, COUNTRY)
+    BULK_PRODUCT_PROBE_FIELDS = BULK_PRODUCT_FIELDS.replace(
+        "  media {", "  media(first: 10) {"
+    ).replace("  variants {", "  variants(first: 100) {")
+    BULK_PRODUCT_PROBE_QUERY = """query BulkProductProbe($publicationId: ID!) {
   publication(id: $publicationId) {
     includedProducts(first: 1) {
       nodes {
@@ -121,6 +163,9 @@ BULK_PRODUCT_PROBE_QUERY = """query BulkProductProbe($publicationId: ID!) {
     }
   }
 }"""
+
+
+configure_target("ES")
 
 CATALOG_METADATA_QUERY = """query CatalogMetadata($id: ID!) {
   catalog(id: $id) {
@@ -251,12 +296,15 @@ def variant_weight_grams(variant: dict) -> int:
     if grams <= 0:
         raise ValueError("Non-positive variant weight")
     if grams > SHIPPING_MAX_GRAMS:
-        raise ValueError(f"Variant exceeds Spain shipping limit: {grams} g")
+        raise ValueError(f"Variant exceeds {TARGET_NAME} shipping limit: {grams} g")
     return grams
 
 
 def shipping_price(grams: int) -> str:
-    return SHIPPING_LIGHT_PRICE if grams <= SHIPPING_LIGHT_MAX_GRAMS else SHIPPING_HEAVY_PRICE
+    for maximum, price in SHIPPING_BANDS:
+        if grams <= maximum:
+            return price
+    raise ValueError(f"Variant exceeds {TARGET_NAME} shipping limit: {grams} g")
 
 
 class Shopify:
@@ -440,7 +488,7 @@ def bulk_variant(record: dict) -> dict:
 def load_bulk_products(url: str, expected_products: int) -> tuple[list[tuple[Candidate, dict]], dict]:
     products: dict[str, dict] = {}
     order: list[str] = []
-    request = urllib.request.Request(url, headers={"User-Agent": "FinnmartSpainFeed/2.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         response = urllib.request.urlopen(request, timeout=120)
     except urllib.error.URLError:
@@ -483,10 +531,11 @@ def load_bulk_products(url: str, expected_products: int) -> tuple[list[tuple[Can
     skipped = {
         "inactive": 0,
         "unapproved_supplier": 0,
-        "missing_spanish": 0,
+        f"missing_{LOCALE}": 0,
         "invalid_product": 0,
     }
     invalid: list[dict] = []
+    missing_translations: list[dict] = []
     for product_id in order:
         record = products[product_id]
         if record.get("status") != "ACTIVE":
@@ -497,15 +546,18 @@ def load_bulk_products(url: str, expected_products: int) -> tuple[list[tuple[Can
             skipped["unapproved_supplier"] += 1
             continue
         translations = {row["key"]: row.get("value") for row in record.get("translations", [])}
-        if not REQUIRED_TRANSLATIONS.issubset(
-            {key for key, value in translations.items() if clean_text(value)}
-        ):
-            skipped["missing_spanish"] += 1
+        present = {key for key, value in translations.items() if clean_text(value)}
+        if not REQUIRED_TRANSLATIONS.issubset(present):
+            skipped[f"missing_{LOCALE}"] += 1
+            missing_translations.append({
+                "product_id": product_id,
+                "missing": sorted(REQUIRED_TRANSLATIONS - present),
+            })
             continue
         handle = clean_text(translations["handle"])
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", handle):
             skipped["invalid_product"] += 1
-            invalid.append({"product_id": product_id, "error": "unsafe Spanish handle"})
+            invalid.append({"product_id": product_id, "error": f"unsafe {LOCALE} handle"})
             continue
         try:
             variants = [bulk_variant(row) for row in record["_variants"]]
@@ -528,7 +580,11 @@ def load_bulk_products(url: str, expected_products: int) -> tuple[list[tuple[Can
             "images": record["_images"],
             "variants": variants,
         }))
-    return rows, {"skipped": skipped, "invalid_products": invalid}
+    return rows, {
+        "skipped": skipped,
+        "invalid_products": invalid,
+        "missing_translations": missing_translations,
+    }
 
 
 def latest_completed_bulk(api: Shopify) -> dict:
@@ -555,7 +611,7 @@ def bulk_catalog_products(api: Shopify, reuse_latest: bool = False) -> tuple[lis
 def catalog_candidates(api: Shopify) -> tuple[list[Candidate], dict]:
     after = None
     candidates: list[Candidate] = []
-    skipped = {"inactive": 0, "unapproved_supplier": 0, "missing_spanish": 0}
+    skipped = {"inactive": 0, "unapproved_supplier": 0, f"missing_{LOCALE}": 0}
     expected = None
     publication_id = None
     page_number = 0
@@ -586,11 +642,11 @@ def catalog_candidates(api: Shopify) -> tuple[list[Candidate], dict]:
                 continue
             translations = {row["key"]: clean_text(row.get("value")) for row in product.get("translations", [])}
             if not REQUIRED_TRANSLATIONS.issubset({key for key, value in translations.items() if value}):
-                skipped["missing_spanish"] += 1
+                skipped[f"missing_{LOCALE}"] += 1
                 continue
             handle = translations["handle"]
             if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", handle):
-                raise RuntimeError(f"Unsafe Spanish handle for {product['id']}")
+                raise RuntimeError(f"Unsafe {LOCALE} handle for {product['id']}")
             candidates.append(Candidate(numeric_gid(product["id"]), handle, supplier))
         print(
             f"Catalog page {page_number}: eligible={len(candidates)} "
@@ -621,7 +677,7 @@ def fetch_product(candidate: Candidate) -> tuple[Candidate, dict]:
     url = f"{STORE}/{LOCALE}/products/{quoted}.js"
     request = urllib.request.Request(url, headers={
         "Accept": "application/json",
-        "User-Agent": "FinnmartSpainFeed/1.0",
+        "User-Agent": USER_AGENT,
     })
     last_error = "unknown"
     for attempt in range(4):
@@ -629,9 +685,9 @@ def fetch_product(candidate: Candidate) -> tuple[Candidate, dict]:
             with urllib.request.urlopen(request, timeout=40) as response:
                 product = json.load(response)
             if int(product.get("id", 0)) != candidate.product_id:
-                raise ValueError("Spanish handle resolved to another product")
+                raise ValueError(f"{TARGET_NAME} handle resolved to another product")
             if product.get("handle") != candidate.handle or not product.get("published_at"):
-                raise ValueError("Spanish market publication mismatch")
+                raise ValueError(f"{TARGET_NAME} market publication mismatch")
             if not product.get("variants"):
                 raise ValueError("Product has no variants")
             return candidate, product
@@ -761,9 +817,9 @@ def build(
 
     rss = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(rss, "channel")
-    ET.SubElement(channel, "title").text = "Finnmart Spain Market feed"
+    ET.SubElement(channel, "title").text = FEED_TITLE
     ET.SubElement(channel, "link").text = f"{STORE}/{LOCALE}/"
-    ET.SubElement(channel, "description").text = "Shopify Market synchronized feed for Spain"
+    ET.SubElement(channel, "description").text = FEED_DESCRIPTION
     item_count = 0
     suppliers = {"NovaEngel": 0, "Royal Textile": 0}
     built_products = 0
@@ -811,7 +867,7 @@ def build(
     links = [item.find(f"{{{G}}}link").text for item in items]
     if len(items) != item_count or len(ids) != len(set(ids)):
         raise RuntimeError("Final item validation failed")
-    if any(not value.startswith("shopify_ES_") for value in ids):
+    if any(not value.startswith(f"shopify_{COUNTRY}_") for value in ids):
         raise RuntimeError("Unexpected offer ID prefix")
     if any(not value.startswith(f"{STORE}/{LOCALE}/products/") for value in links):
         raise RuntimeError("Unexpected landing page locale")
@@ -832,11 +888,15 @@ def build(
         "build_failures": build_failures,
         "excluded_missing_images": len(missing_image_failures),
         **fallback_report,
+        "locale": LOCALE,
+        "country": COUNTRY,
         "shipping": {
             "service": SHIPPING_SERVICE,
-            "delivery_days": "3-5",
-            "up_to_10kg": SHIPPING_LIGHT_PRICE,
-            "over_10kg_to_20kg": SHIPPING_HEAVY_PRICE,
+            "delivery_days": f"{SHIPPING_MIN_DAYS}-{SHIPPING_MAX_DAYS}",
+            "weight_bands": [
+                {"maximum_grams": maximum, "price": price}
+                for maximum, price in SHIPPING_BANDS
+            ],
         },
         "xml_sha256": hashlib.sha256(xml_bytes).hexdigest(),
     }
@@ -850,7 +910,7 @@ def diagnose(secret: str, workers: int, limit: int) -> dict:
     api = Shopify(secret)
     candidates, catalog = catalog_candidates(api)
     if not candidates:
-        raise RuntimeError("Catalog has no eligible Spanish products")
+        raise RuntimeError(f"Catalog has no eligible {LOCALE} products")
     sample_size = min(limit, len(candidates))
     if sample_size == 1:
         sample = [candidates[0]]
@@ -917,8 +977,9 @@ def recent_bulk_status(secret: str) -> list[dict]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, default=Path("public/finnmart-es.xml"))
-    parser.add_argument("--summary", type=Path, default=Path("public/finnmart-es-summary.json"))
+    parser.add_argument("--target", choices=sorted(TARGETS), default="ES")
+    parser.add_argument("--out", type=Path)
+    parser.add_argument("--summary", type=Path)
     parser.add_argument("--workers", type=int, default=16)
     parser.add_argument("--minimum-products", type=int, default=10_000)
     parser.add_argument("--diagnose-limit", type=int, default=0)
@@ -926,6 +987,9 @@ def main() -> None:
     parser.add_argument("--bulk-status", action="store_true")
     parser.add_argument("--reuse-latest-bulk", action="store_true")
     args = parser.parse_args()
+    configure_target(args.target)
+    out = args.out or DEFAULT_OUT
+    summary_path = args.summary or DEFAULT_SUMMARY
     if not 1 <= args.workers <= 32:
         raise SystemExit("workers must be between 1 and 32")
     secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "")
@@ -942,8 +1006,8 @@ def main() -> None:
         return
     result = build(
         secret,
-        args.out,
-        args.summary,
+        out,
+        summary_path,
         args.workers,
         args.minimum_products,
         reuse_latest_bulk=args.reuse_latest_bulk,

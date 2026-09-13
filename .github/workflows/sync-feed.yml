@@ -29,6 +29,10 @@ jobs:
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_feed.py
+      - name: Synchronize the Shopify Ireland Market catalog in English
+        env:
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+        run: python sync_feed.py --target IE
       - name: Build the isolated Finland 100-product pilot
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
