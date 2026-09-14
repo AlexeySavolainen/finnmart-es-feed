@@ -66,6 +66,50 @@ class SyncFeedTests(unittest.TestCase):
         self.assertEqual(values["min_transit_time"], "5")
         self.assertEqual(values["max_transit_time"], "8")
 
+    def test_france_target_and_offer_shipping(self):
+        feed.configure_target("FR")
+        self.assertEqual(feed.LOCALE, "fr")
+        self.assertEqual(feed.COUNTRY, "FR")
+        self.assertEqual(feed.PATH_PREFIX, "/fr")
+        self.assertEqual(feed.HANDLE_LOCALE, "en")
+        self.assertEqual(feed.shipping_price(500), "7.95 EUR")
+        self.assertEqual(feed.shipping_price(2001), "9.05 EUR")
+        self.assertEqual(feed.shipping_price(5001), "13.80 EUR")
+        self.assertEqual(feed.shipping_price(10001), "14.95 EUR")
+        self.assertEqual(feed.shipping_price(15001), "21.90 EUR")
+        self.assertIn('translations(locale: "fr")', feed.BULK_PRODUCT_FIELDS)
+        self.assertIn('handleTranslations: translations(locale: "en")', feed.BULK_PRODUCT_FIELDS)
+        self.assertIn('contextualPricing(context: {country: FR})', feed.BULK_PRODUCT_FIELDS)
+
+        channel = ET.Element("channel")
+        candidate = feed.Candidate(123, "produit-francais", "Royal Textile")
+        product = {
+            "title": "Produit français",
+            "description": "Description française",
+            "type": "Textile",
+            "vendor": "Royal Textile",
+            "images": ["https://cdn.example.test/image.jpg"],
+            "options": ["Title"],
+            "variants": [{
+                "id": 456, "price": 1999, "available": True,
+                "weight": 5001, "sku": "SKU-FR", "barcode": "",
+                "options": ["Default Title"],
+            }],
+        }
+        self.assertEqual(feed.add_product(channel, candidate, product), 1)
+        item = channel.find("item")
+        values = {
+            node.tag.rsplit("}", 1)[-1]: node.text
+            for node in item.find(f"{{{feed.G}}}shipping")
+        }
+        self.assertEqual(item.find(f"{{{feed.G}}}id").text, "shopify_FR_123_456")
+        self.assertEqual(item.find(f"{{{feed.G}}}link").text,
+                         "https://finnmart.eu/fr/products/produit-francais?variant=456")
+        self.assertEqual(values["country"], "FR")
+        self.assertEqual(values["price"], "13.80 EUR")
+        self.assertEqual(values["min_transit_time"], "5")
+        self.assertEqual(values["max_transit_time"], "8")
+
     def test_offer_contains_spanish_shipping(self):
         channel = ET.Element("channel")
         candidate = feed.Candidate(123, "producto-espanol", "NovaEngel")

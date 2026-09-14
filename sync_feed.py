@@ -39,12 +39,13 @@ STORE = "https://finnmart.eu"
 CURRENCY = "EUR"
 G = "http://base.google.com/ns/1.0"
 SHIPPING_MAX_GRAMS = 20_000
-REQUIRED_TRANSLATIONS = {"title", "body_html", "handle", "product_type"}
+REQUIRED_TRANSLATIONS = {"title", "body_html", "product_type"}
 ET.register_namespace("g", G)
 
 TARGETS = {
     "ES": {
         "locale": "es", "country": "ES", "name": "Spain",
+        "handle_locale": "es",
         "path_prefix": "/es",
         "feed_title": "Finnmart Spain Market feed",
         "feed_description": "Shopify Market synchronized feed for Spain",
@@ -56,6 +57,7 @@ TARGETS = {
     },
     "IE": {
         "locale": "en", "country": "IE", "name": "Ireland",
+        "handle_locale": "en",
         # English is the default language of finnmart.eu, so Shopify serves it
         # at the root rather than below a non-existent /en/ prefix.
         "path_prefix": "",
@@ -72,10 +74,29 @@ TARGETS = {
         "default_out": "public/finnmart-ie.xml",
         "default_summary": "public/finnmart-ie-summary.json",
     },
+    "FR": {
+        "locale": "fr", "country": "FR", "name": "France",
+        # French content is published under the existing English market URLs.
+        # Shopify therefore resolves /fr/ products with the English handle.
+        "handle_locale": "en",
+        "path_prefix": "/fr",
+        "feed_title": "Finnmart France Market feed",
+        "feed_description": "Shopify Market synchronized feed for France",
+        "shipping_service": "Livraison standard (5–8 jours ouvrables)",
+        "shipping_min_days": 5, "shipping_max_days": 8,
+        # Exact Shopify General profile rates for France on 14 September 2026.
+        "shipping_bands": (
+            (500, "7.95 EUR"), (2_000, "7.95 EUR"),
+            (5_000, "9.05 EUR"), (10_000, "13.80 EUR"),
+            (15_000, "14.95 EUR"), (20_000, "21.90 EUR"),
+        ),
+        "default_out": "public/finnmart-fr.xml",
+        "default_summary": "public/finnmart-fr-summary.json",
+    },
 }
 
 
-def translated_catalog_query(locale: str) -> str:
+def translated_catalog_query(locale: str, handle_locale: str) -> str:
     return '''query CatalogProducts($id: ID!, $after: String) {
   catalog(id: $id) {
     __typename
@@ -93,14 +114,15 @@ def translated_catalog_query(locale: str) -> str:
           status
           tags
           translations(locale: "__LOCALE__") { key value }
+          handleTranslations: translations(locale: "__HANDLE_LOCALE__") { key value }
         }
       }
     }
   }
-}'''.replace("__LOCALE__", locale)
+}'''.replace("__LOCALE__", locale).replace("__HANDLE_LOCALE__", handle_locale)
 
 
-def translated_bulk_fields(locale: str, country: str) -> str:
+def translated_bulk_fields(locale: str, handle_locale: str, country: str) -> str:
     return '''
   id
   __typename
@@ -108,6 +130,7 @@ def translated_bulk_fields(locale: str, country: str) -> str:
   tags
   vendor
   translations(locale: "__LOCALE__") { key value }
+  handleTranslations: translations(locale: "__HANDLE_LOCALE__") { key value }
   media {
     edges { node {
       __typename
@@ -131,17 +154,18 @@ def translated_bulk_fields(locale: str, country: str) -> str:
       }
     } }
   }
-'''.replace("__LOCALE__", locale).replace("__COUNTRY__", country)
+'''.replace("__LOCALE__", locale).replace("__HANDLE_LOCALE__", handle_locale).replace("__COUNTRY__", country)
 
 
 def configure_target(country: str) -> None:
-    global LOCALE, COUNTRY, TARGET_NAME, PATH_PREFIX, FEED_TITLE, FEED_DESCRIPTION
+    global LOCALE, HANDLE_LOCALE, COUNTRY, TARGET_NAME, PATH_PREFIX, FEED_TITLE, FEED_DESCRIPTION
     global SHIPPING_SERVICE, SHIPPING_MIN_DAYS, SHIPPING_MAX_DAYS, SHIPPING_BANDS
     global DEFAULT_OUT, DEFAULT_SUMMARY, USER_AGENT
     global CATALOG_QUERY, BULK_PRODUCT_FIELDS, BULK_PRODUCT_PROBE_FIELDS
     global BULK_PRODUCT_PROBE_QUERY
     config = TARGETS[country]
     LOCALE = config["locale"]
+    HANDLE_LOCALE = config["handle_locale"]
     COUNTRY = config["country"]
     TARGET_NAME = config["name"]
     PATH_PREFIX = config["path_prefix"]
@@ -154,8 +178,8 @@ def configure_target(country: str) -> None:
     DEFAULT_OUT = Path(config["default_out"])
     DEFAULT_SUMMARY = Path(config["default_summary"])
     USER_AGENT = f"Finnmart{TARGET_NAME}Feed/2.0"
-    CATALOG_QUERY = translated_catalog_query(LOCALE)
-    BULK_PRODUCT_FIELDS = translated_bulk_fields(LOCALE, COUNTRY)
+    CATALOG_QUERY = translated_catalog_query(LOCALE, HANDLE_LOCALE)
+    BULK_PRODUCT_FIELDS = translated_bulk_fields(LOCALE, HANDLE_LOCALE, COUNTRY)
     BULK_PRODUCT_PROBE_FIELDS = BULK_PRODUCT_FIELDS.replace(
         "  media {", "  media(first: 10) {"
     ).replace("  variants {", "  variants(first: 100) {")
@@ -551,15 +575,21 @@ def load_bulk_products(url: str, expected_products: int) -> tuple[list[tuple[Can
             skipped["unapproved_supplier"] += 1
             continue
         translations = {row["key"]: row.get("value") for row in record.get("translations", [])}
+        handle_translations = {
+            row["key"]: row.get("value") for row in record.get("handleTranslations", [])
+        }
         present = {key for key, value in translations.items() if clean_text(value)}
-        if not REQUIRED_TRANSLATIONS.issubset(present):
+        if not REQUIRED_TRANSLATIONS.issubset(present) or not clean_text(handle_translations.get("handle")):
             skipped[f"missing_{LOCALE}"] += 1
             missing_translations.append({
                 "product_id": product_id,
-                "missing": sorted(REQUIRED_TRANSLATIONS - present),
+                "missing": sorted(
+                    (REQUIRED_TRANSLATIONS - present)
+                    | ({f"handle:{HANDLE_LOCALE}"} if not clean_text(handle_translations.get("handle")) else set())
+                ),
             })
             continue
-        handle = clean_text(translations["handle"])
+        handle = clean_text(handle_translations["handle"])
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", handle):
             skipped["invalid_product"] += 1
             invalid.append({"product_id": product_id, "error": f"unsafe {LOCALE} handle"})
@@ -646,10 +676,17 @@ def catalog_candidates(api: Shopify) -> tuple[list[Candidate], dict]:
                 skipped["unapproved_supplier"] += 1
                 continue
             translations = {row["key"]: clean_text(row.get("value")) for row in product.get("translations", [])}
-            if not REQUIRED_TRANSLATIONS.issubset({key for key, value in translations.items() if value}):
+            handle_translations = {
+                row["key"]: clean_text(row.get("value"))
+                for row in product.get("handleTranslations", [])
+            }
+            if (
+                not REQUIRED_TRANSLATIONS.issubset({key for key, value in translations.items() if value})
+                or not handle_translations.get("handle")
+            ):
                 skipped[f"missing_{LOCALE}"] += 1
                 continue
-            handle = translations["handle"]
+            handle = handle_translations["handle"]
             if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", handle):
                 raise RuntimeError(f"Unsafe {LOCALE} handle for {product['id']}")
             candidates.append(Candidate(numeric_gid(product["id"]), handle, supplier))

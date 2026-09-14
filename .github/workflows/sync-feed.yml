@@ -1,4 +1,4 @@
-name: Sync Finnmart Spain and Finland feeds
+name: Sync Finnmart Spain, Ireland, France and Finland feeds
 
 on:
   workflow_dispatch:
@@ -33,6 +33,10 @@ jobs:
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_feed.py --target IE
+      - name: Synchronize the Shopify France Market catalog in French
+        env:
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+        run: python sync_feed.py --target FR
       - name: Build the isolated Finland 100-product pilot
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
