@@ -36,6 +36,14 @@ France validation report:
 
 `/finnmart-fr-summary.json`
 
+Portugal European Portuguese feed endpoint:
+
+`/finnmart-pt.xml`
+
+Portugal validation report:
+
+`/finnmart-pt-summary.json`
+
 Finland replacement pilot (100 Shopify products, isolated from live ads):
 
 `/vuodevaatteet-fi-pilot.xml`
@@ -76,7 +84,7 @@ translations, and exports the exact catalog with Shopify Bulk GraphQL. It then
 validates unique Spanish offer IDs, localized landing pages, required fields,
 shipping details, supplier coverage, and safety thresholds before publishing.
 
-The scheduled GitHub Actions workflow builds the full Spain, Ireland and France feeds
+The scheduled GitHub Actions workflow builds the full Spain, Ireland, France and Portugal feeds
 daily and deploys the
 `public` directory to GitHub Pages without committing generated XML files to Git
 history. The required repository secret is `SHOPIFY_CLIENT_SECRET`.

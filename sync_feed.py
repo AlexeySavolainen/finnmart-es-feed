@@ -93,6 +93,21 @@ TARGETS = {
         "default_out": "public/finnmart-fr.xml",
         "default_summary": "public/finnmart-fr-summary.json",
     },
+    "PT": {
+        "locale": "pt-PT", "country": "PT", "name": "Portugal",
+        # European Portuguese is published at /pt-pt/ while product handles
+        # remain aligned with the English market URLs.
+        "handle_locale": "en",
+        "path_prefix": "/pt-pt",
+        "feed_title": "Finnmart Portugal Market feed",
+        "feed_description": "Shopify Market synchronized feed for Portugal",
+        "shipping_service": "Entrega standard (5–8 dias úteis)",
+        "shipping_min_days": 5, "shipping_max_days": 8,
+        # Exact Shopify General profile rate for Portugal on 14 September 2026.
+        "shipping_bands": ((20_000, "10.50 EUR"),),
+        "default_out": "public/finnmart-pt.xml",
+        "default_summary": "public/finnmart-pt-summary.json",
+    },
 }
 
 
