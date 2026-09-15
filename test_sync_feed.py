@@ -113,8 +113,8 @@ class SyncFeedTests(unittest.TestCase):
                          "https://finnmart.eu/products/english-product?variant=456")
         self.assertEqual(values["country"], "IE")
         self.assertEqual(values["price"], "24.15 EUR")
-        self.assertEqual(values["min_transit_time"], "5")
-        self.assertEqual(values["max_transit_time"], "8")
+        self.assertEqual(values["min_transit_time"], "3")
+        self.assertEqual(values["max_transit_time"], "5")
 
     def test_france_target_and_offer_shipping(self):
         feed.configure_target("FR")
@@ -157,8 +157,8 @@ class SyncFeedTests(unittest.TestCase):
                          "https://finnmart.eu/fr/products/produit-francais?variant=456")
         self.assertEqual(values["country"], "FR")
         self.assertEqual(values["price"], "13.80 EUR")
-        self.assertEqual(values["min_transit_time"], "5")
-        self.assertEqual(values["max_transit_time"], "8")
+        self.assertEqual(values["min_transit_time"], "3")
+        self.assertEqual(values["max_transit_time"], "5")
 
     def test_portugal_target_and_offer_shipping(self):
         feed.configure_target("PT")

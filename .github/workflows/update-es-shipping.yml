@@ -1,4 +1,4 @@
-name: Update one country shipping only
+name: Update isolated shipping fields
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +14,7 @@ on:
         options:
           - ES
           - PT
+          - IE_FR
 permissions:
   contents: read
   actions: read
@@ -45,7 +46,12 @@ jobs:
       - name: Change only selected country shipping prices
         env:
           SHIPPING_COUNTRY: ${{ inputs.country }}
-        run: python update_es_shipping.py preserved "$SHIPPING_COUNTRY"
+        run: |
+          if [ "$SHIPPING_COUNTRY" = IE_FR ]; then
+            python update_delivery_times.py preserved
+          else
+            python update_es_shipping.py preserved "$SHIPPING_COUNTRY"
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

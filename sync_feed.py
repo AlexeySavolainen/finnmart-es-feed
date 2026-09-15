@@ -63,8 +63,8 @@ TARGETS = {
         "path_prefix": "",
         "feed_title": "Finnmart Ireland Market feed",
         "feed_description": "Shopify Market synchronized feed for Ireland",
-        "shipping_service": "Standard delivery (5–8 business days)",
-        "shipping_min_days": 5, "shipping_max_days": 8,
+        "shipping_service": "Standard delivery (3–5 business days)",
+        "shipping_min_days": 3, "shipping_max_days": 5,
         # Exact Shopify General profile rates for Ireland on 13 September 2026.
         "shipping_bands": (
             (500, "11.50 EUR"), (2_000, "11.50 EUR"),
@@ -82,8 +82,8 @@ TARGETS = {
         "path_prefix": "/fr",
         "feed_title": "Finnmart France Market feed",
         "feed_description": "Shopify Market synchronized feed for France",
-        "shipping_service": "Livraison standard (5–8 jours ouvrables)",
-        "shipping_min_days": 5, "shipping_max_days": 8,
+        "shipping_service": "Livraison standard (3–5 jours ouvrables)",
+        "shipping_min_days": 3, "shipping_max_days": 5,
         # Exact Shopify General profile rates for France on 14 September 2026.
         "shipping_bands": (
             (500, "7.95 EUR"), (2_000, "7.95 EUR"),
