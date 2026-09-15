@@ -1,4 +1,4 @@
-name: Update Spain shipping only
+name: Update one country shipping only
 on:
   workflow_dispatch:
     inputs:
@@ -6,6 +6,14 @@ on:
         description: Successful currently deployed feed run to preserve
         required: true
         type: string
+      country:
+        description: Only this country's shipping files will change
+        required: true
+        default: ES
+        type: choice
+        options:
+          - ES
+          - PT
 permissions:
   contents: read
   actions: read
@@ -34,8 +42,10 @@ jobs:
         run: |
           mkdir preserved
           tar -xf previous/artifact.tar -C preserved
-      - name: Change only Spain shipping prices
-        run: python update_es_shipping.py preserved
+      - name: Change only selected country shipping prices
+        env:
+          SHIPPING_COUNTRY: ${{ inputs.country }}
+        run: python update_es_shipping.py preserved "$SHIPPING_COUNTRY"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

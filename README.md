@@ -38,6 +38,8 @@ France validation report:
 
 Portugal European Portuguese feed endpoint:
 
+Shipping: EUR 4.90 up to 10 kg inclusive; EUR 6.90 over 10 kg through 20 kg inclusive.
+
 `/finnmart-pt.xml`
 
 Portugal validation report:

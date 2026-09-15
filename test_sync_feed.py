@@ -119,8 +119,12 @@ class SyncFeedTests(unittest.TestCase):
         self.assertEqual(feed.COUNTRY, "PT")
         self.assertEqual(feed.PATH_PREFIX, "/pt-pt")
         self.assertEqual(feed.HANDLE_LOCALE, "en")
-        self.assertEqual(feed.shipping_price(1), "10.50 EUR")
-        self.assertEqual(feed.shipping_price(20_000), "10.50 EUR")
+        self.assertEqual(feed.shipping_price(1), "4.90 EUR")
+        self.assertEqual(feed.shipping_price(10_000), "4.90 EUR")
+        self.assertEqual(feed.shipping_price(10_001), "6.90 EUR")
+        self.assertEqual(feed.shipping_price(20_000), "6.90 EUR")
+        with self.assertRaises(ValueError):
+            feed.shipping_price(20_001)
         self.assertIn('translations(locale: "pt-PT")', feed.BULK_PRODUCT_FIELDS)
         self.assertIn('handleTranslations: translations(locale: "en")', feed.BULK_PRODUCT_FIELDS)
         self.assertIn('contextualPricing(context: {country: PT})', feed.BULK_PRODUCT_FIELDS)
@@ -150,7 +154,7 @@ class SyncFeedTests(unittest.TestCase):
         self.assertEqual(item.find(f"{{{feed.G}}}link").text,
                          "https://finnmart.eu/pt-pt/products/produto-portugues?variant=456")
         self.assertEqual(values["country"], "PT")
-        self.assertEqual(values["price"], "10.50 EUR")
+        self.assertEqual(values["price"], "6.90 EUR")
         self.assertEqual(values["min_transit_time"], "5")
         self.assertEqual(values["max_transit_time"], "8")
 

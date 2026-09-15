@@ -103,8 +103,8 @@ TARGETS = {
         "feed_description": "Shopify Market synchronized feed for Portugal",
         "shipping_service": "Entrega standard (5–8 dias úteis)",
         "shipping_min_days": 5, "shipping_max_days": 8,
-        # Exact Shopify General profile rate for Portugal on 14 September 2026.
-        "shipping_bands": ((20_000, "10.50 EUR"),),
+        # Exact Shopify General profile rates for Portugal on 15 September 2026.
+        "shipping_bands": ((10_000, "4.90 EUR"), (20_000, "6.90 EUR")),
         "default_out": "public/finnmart-pt.xml",
         "default_summary": "public/finnmart-pt-summary.json",
     },
