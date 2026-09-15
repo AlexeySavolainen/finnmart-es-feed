@@ -1,0 +1,47 @@
+name: Update Spain shipping only
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful currently deployed feed run to preserve
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+concurrency:
+  group: finnmart-product-feeds
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Check shipping and country isolation tests
+        run: python -m unittest -v test_sync_feed.py test_sync_fi_pilot.py test_sync_fi_full.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+          path: previous
+      - name: Extract existing publication
+        run: |
+          mkdir preserved
+          tar -xf previous/artifact.tar -C preserved
+      - name: Change only Spain shipping prices
+        run: python update_es_shipping.py preserved
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: preserved
+      - uses: actions/deploy-pages@v4
+        id: deployment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}

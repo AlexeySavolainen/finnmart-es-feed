@@ -51,7 +51,7 @@ TARGETS = {
         "feed_description": "Shopify Market synchronized feed for Spain",
         "shipping_service": "Entrega estándar (3–5 días laborables)",
         "shipping_min_days": 3, "shipping_max_days": 5,
-        "shipping_bands": ((10_000, "11.50 EUR"), (20_000, "13.10 EUR")),
+        "shipping_bands": ((10_000, "4.90 EUR"), (20_000, "6.90 EUR")),
         "default_out": "public/finnmart-es.xml",
         "default_summary": "public/finnmart-es-summary.json",
     },
