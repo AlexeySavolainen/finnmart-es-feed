@@ -158,6 +158,7 @@ def translated_bulk_fields(locale: str, handle_locale: str, country: str) -> str
       __typename
       legacyResourceId
       availableForSale
+      inventoryQuantity
       barcode
       sku
       selectedOptions { name value }
@@ -521,6 +522,7 @@ def bulk_variant(record: dict) -> dict:
         "id": int(record["legacyResourceId"]),
         "price": money_to_cents(price.get("amount")),
         "available": bool(record.get("availableForSale")),
+        "inventory_quantity": record.get("inventoryQuantity"),
         "barcode": record.get("barcode"),
         "sku": record.get("sku"),
         "options": record.get("selectedOptions", []),
@@ -795,6 +797,15 @@ def add_product(
     ]
     count = 0
     for variant in product["variants"]:
+        quantity = variant.get("inventory_quantity")
+        # Never treat missing inventory data (including old bulk exports) as
+        # zero: stop publication rather than silently emptying a live feed.
+        if type(quantity) is not int:
+            raise ValueError("Missing or invalid variant inventory quantity")
+        if quantity <= 0 or not variant.get("available"):
+            if report is not None:
+                report["excluded_unavailable_items"] = report.get("excluded_unavailable_items", 0) + 1
+            continue
         variant_id = int(variant["id"])
         price = int(variant["price"])
         if price <= 0:
@@ -882,13 +893,16 @@ def build(
     built_products = 0
     build_failures: list[dict] = []
     fallback_report = {
+        "excluded_unavailable_items": 0,
+        "excluded_unavailable_products": 0,
         "weight_fallback_items": 0,
         "weight_fallback_by_supplier": {"NovaEngel": 0, "Royal Textile": 0},
     }
     for candidate, product in successes:
         previous_children = len(channel)
         try:
-            item_count += add_product(channel, candidate, product, fallback_report)
+            added = add_product(channel, candidate, product, fallback_report)
+            item_count += added
         except (KeyError, TypeError, ValueError) as exc:
             del channel[previous_children:]
             build_failures.append({
@@ -897,6 +911,9 @@ def build(
                 "supplier": candidate.supplier,
                 "error": str(exc),
             })
+            continue
+        if added == 0:
+            fallback_report["excluded_unavailable_products"] += 1
             continue
         suppliers[candidate.supplier] += 1
         built_products += 1
@@ -930,6 +947,8 @@ def build(
         raise RuntimeError("Unexpected landing page locale")
     if len(parsed.findall(f"./channel/item/{{{G}}}shipping")) != item_count:
         raise RuntimeError("Shipping is missing from one or more offers")
+    if any(item.findtext(f"{{{G}}}availability") != "in_stock" for item in items):
+        raise RuntimeError("Unavailable variant leaked into Finnmart feed")
 
     summary = {
         "status": "validated",
@@ -947,6 +966,7 @@ def build(
         **fallback_report,
         "locale": LOCALE,
         "country": COUNTRY,
+        "inventory_filter": "inventoryQuantity > 0 and availableForSale",
         "shipping": {
             "service": SHIPPING_SERVICE,
             "delivery_days": f"{SHIPPING_MIN_DAYS}-{SHIPPING_MAX_DAYS}",

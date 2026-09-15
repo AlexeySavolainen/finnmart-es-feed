@@ -5,6 +5,53 @@ import sync_feed as feed
 
 
 class SyncFeedTests(unittest.TestCase):
+    def test_stock_filter_all_finnmart_targets_and_replenishment(self):
+        candidate = feed.Candidate(123, "product", "NovaEngel")
+        for target in feed.TARGETS:
+            with self.subTest(target=target):
+                feed.configure_target(target)
+                self.assertIn("inventoryQuantity", feed.BULK_PRODUCT_FIELDS)
+                product = {
+                    "title": "Product", "description": "Description", "type": "Type",
+                    "images": ["https://cdn.example.test/image.jpg"],
+                    "variants": [
+                        {"id": i, "inventory_quantity": quantity, "available": available,
+                         "price": 1999, "weight": 500}
+                        for i, quantity, available in [(1, 2, True), (2, 0, True),
+                                                       (3, -1, True), (4, 3, False)]
+                    ],
+                }
+                report = {}
+                channel = ET.Element("channel")
+                self.assertEqual(feed.add_product(channel, candidate, product, report), 1)
+                self.assertEqual(report["excluded_unavailable_items"], 3)
+                self.assertEqual(channel.findtext(f"item/{{{feed.G}}}id"),
+                                 f"shopify_{target}_123_1")
+                product["variants"][1]["inventory_quantity"] = 5
+                channel = ET.Element("channel")
+                self.assertEqual(feed.add_product(channel, candidate, product), 2)
+                self.assertEqual(channel.findall("item")[1].findtext(f"{{{feed.G}}}id"),
+                                 f"shopify_{target}_123_2")
+
+    def test_missing_inventory_is_not_silently_treated_as_zero(self):
+        product = {
+            "title": "Product", "description": "Description", "type": "Type",
+            "images": ["https://cdn.example.test/image.jpg"],
+            "variants": [{"id": 1, "available": True, "price": 1999, "weight": 500}],
+        }
+        for quantity in [None, "5", True]:
+            product["variants"][0]["inventory_quantity"] = quantity
+            with self.assertRaisesRegex(ValueError, "inventory quantity"):
+                feed.add_product(ET.Element("channel"), feed.Candidate(123, "product", "NovaEngel"), product)
+
+    def test_bulk_variant_preserves_exact_inventory(self):
+        variant = feed.bulk_variant({
+            "legacyResourceId": "1", "availableForSale": True, "inventoryQuantity": 0,
+            "contextualPricing": {"price": {"amount": "10", "currencyCode": "EUR"}},
+            "inventoryItem": {"measurement": {"weight": {"value": 1, "unit": "KILOGRAMS"}}},
+        })
+        self.assertEqual(variant["inventory_quantity"], 0)
+
     def tearDown(self):
         feed.configure_target("ES")
 
@@ -50,7 +97,7 @@ class SyncFeedTests(unittest.TestCase):
             "images": ["https://cdn.example.test/image.jpg"],
             "options": ["Title"],
             "variants": [{
-                "id": 456, "price": 1999, "available": True,
+                "id": 456, "price": 1999, "available": True, "inventory_quantity": 1,
                 "weight": 5001, "sku": "SKU-IE", "barcode": "",
                 "options": ["Default Title"],
             }],
@@ -94,7 +141,7 @@ class SyncFeedTests(unittest.TestCase):
             "images": ["https://cdn.example.test/image.jpg"],
             "options": ["Title"],
             "variants": [{
-                "id": 456, "price": 1999, "available": True,
+                "id": 456, "price": 1999, "available": True, "inventory_quantity": 1,
                 "weight": 5001, "sku": "SKU-FR", "barcode": "",
                 "options": ["Default Title"],
             }],
@@ -139,7 +186,7 @@ class SyncFeedTests(unittest.TestCase):
             "images": ["https://cdn.example.test/image.jpg"],
             "options": ["Title"],
             "variants": [{
-                "id": 456, "price": 1999, "available": True,
+                "id": 456, "price": 1999, "available": True, "inventory_quantity": 1,
                 "weight": 20_000, "sku": "SKU-PT", "barcode": "",
                 "options": ["Default Title"],
             }],
@@ -172,6 +219,7 @@ class SyncFeedTests(unittest.TestCase):
                 "id": 456,
                 "price": 1999,
                 "available": True,
+                "inventory_quantity": 1,
                 "weight": 500,
                 "sku": "SKU-1",
                 "barcode": "4006381333931",
@@ -201,6 +249,7 @@ class SyncFeedTests(unittest.TestCase):
                 "id": 789,
                 "price": 2999,
                 "available": True,
+                "inventory_quantity": 1,
                 "weight": 0,
                 "sku": "ROYAL-1",
                 "barcode": "",

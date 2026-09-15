@@ -4,6 +4,11 @@ Automated full-product feed for the Finnmart Spain market.
 
 - Exact Shopify Market catalog: `Finnmart EU – NovaEngel + Royal Textile`
 - NovaEngel and Royal Textile products only
+- ES, IE, FR and PT include only variants with Shopify `inventoryQuantity > 0`
+  and `availableForSale = true`, belonging to active Market products. Sold-out
+  variants return with the same offer ID after replenishment. Missing inventory
+  data stops publication rather than being interpreted as zero stock.
+- The Finland production and pilot generators do not use this stock filter.
 - Spanish Shopify landing pages only
 - Stable `shopify_ES_` offer IDs
 - Spain shipping submitted per offer: `Entrega estándar (3–5 días laborables)`

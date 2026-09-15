@@ -2,11 +2,17 @@ name: Sync Finnmart Spain, Ireland, France, Portugal and Finland feeds
 
 on:
   workflow_dispatch:
+    inputs:
+      preserve_finland_run:
+        description: Successful feed run whose Finnish XML and reports must remain unchanged
+        required: false
+        type: string
   schedule:
     - cron: "17 2 * * *"
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -42,13 +48,31 @@ jobs:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_feed.py --target PT
       - name: Build the isolated Finland 100-product pilot
+        if: ${{ !inputs.preserve_finland_run }}
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_fi_pilot.py
       - name: Build the complete Finland production candidate
+        if: ${{ !inputs.preserve_finland_run }}
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_fi_full.py
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.preserve_finland_run != '' }}
+        with:
+          name: github-pages
+          run-id: ${{ inputs.preserve_finland_run }}
+          github-token: ${{ github.token }}
+          path: previous
+      - name: Preserve Finnish feeds byte-for-byte
+        if: ${{ inputs.preserve_finland_run != '' }}
+        run: |
+          mkdir preserved
+          tar -xf previous/artifact.tar -C preserved
+          for filename in vuodevaatteet-fi-pilot.xml vuodevaatteet-fi-pilot-summary.json vuodevaatteet-fi-production-candidate.xml vuodevaatteet-fi-production-candidate-summary.json; do
+            cp "preserved/$filename" "public/$filename"
+            cmp "preserved/$filename" "public/$filename"
+          done
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

@@ -5,6 +5,14 @@ import sync_fi_full as feed
 
 
 class FinlandFullFeedTests(unittest.TestCase):
+    def test_finland_keeps_zero_stock_variants(self):
+        variant = self.sample_variant()
+        variant["availableForSale"] = False
+        variant["inventoryQuantity"] = 0
+        item = feed.build_item(self.sample_product(), variant, feed.empty_report())
+        self.assertEqual(item.findtext(f"{{{feed.G}}}availability"), "out_of_stock")
+        self.assertEqual(item.findtext(f"{{{feed.G}}}id"), "shopify_FI_123_456")
+
     def sample_product(self):
         return {
             "id": "gid://shopify/Product/123",
