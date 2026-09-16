@@ -205,6 +205,43 @@ class SyncFeedTests(unittest.TestCase):
         self.assertEqual(values["min_transit_time"], "5")
         self.assertEqual(values["max_transit_time"], "8")
 
+    def test_italy_target_and_shipping_brackets(self):
+        feed.configure_target("IT")
+        self.assertEqual(feed.LOCALE, "it")
+        self.assertEqual(feed.COUNTRY, "IT")
+        self.assertEqual(feed.PATH_PREFIX, "/it")
+        self.assertEqual(feed.shipping_price(1), "6.90 EUR")
+        self.assertEqual(feed.shipping_price(2_000), "6.90 EUR")
+        self.assertEqual(feed.shipping_price(2_001), "8.90 EUR")
+        self.assertEqual(feed.shipping_price(5_001), "12.90 EUR")
+        self.assertEqual(feed.shipping_price(10_001), "24.90 EUR")
+        with self.assertRaises(ValueError):
+            feed.shipping_price(20_001)
+        self.assertIn('translations(locale: "it")', feed.BULK_PRODUCT_FIELDS)
+        self.assertIn('handleTranslations: translations(locale: "en")', feed.BULK_PRODUCT_FIELDS)
+        self.assertIn('contextualPricing(context: {country: IT})', feed.BULK_PRODUCT_FIELDS)
+
+        channel = ET.Element("channel")
+        candidate = feed.Candidate(123, "prodotto", "NovaEngel")
+        product = {
+            "title": "Prodotto", "description": "Descrizione", "type": "Tipo",
+            "vendor": "Brand", "images": ["https://example.com/image.jpg"],
+            "options": ["Title"], "variants": [{
+                "id": 456, "price": 999, "available": True,
+                "inventory_quantity": 1, "weight": 5_001,
+                "sku": "SKU-IT", "barcode": "", "options": ["Default Title"],
+            }],
+        }
+        self.assertEqual(feed.add_product(channel, candidate, product), 1)
+        item = channel.find("item")
+        shipping = item.find(f"{{{feed.G}}}shipping")
+        values = {node.tag.rsplit("}", 1)[-1]: node.text for node in shipping}
+        self.assertEqual(item.find(f"{{{feed.G}}}id").text, "shopify_IT_123_456")
+        self.assertEqual(values["country"], "IT")
+        self.assertEqual(values["price"], "12.90 EUR")
+        self.assertEqual(values["min_transit_time"], "3")
+        self.assertEqual(values["max_transit_time"], "5")
+
     def test_offer_contains_spanish_shipping(self):
         channel = ET.Element("channel")
         candidate = feed.Candidate(123, "producto-espanol", "NovaEngel")

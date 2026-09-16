@@ -108,6 +108,23 @@ TARGETS = {
         "default_out": "public/finnmart-pt.xml",
         "default_summary": "public/finnmart-pt-summary.json",
     },
+    "IT": {
+        "locale": "it", "country": "IT", "name": "Italy",
+        # Italian is published below /it/ while product handles remain aligned
+        # with the English market URLs.
+        "handle_locale": "en",
+        "path_prefix": "/it",
+        "feed_title": "Finnmart Italy Market feed",
+        "feed_description": "Feed sincronizzato con Shopify Market per l'Italia",
+        "shipping_service": "Consegna standard (3–5 giorni lavorativi)",
+        "shipping_min_days": 3, "shipping_max_days": 5,
+        "shipping_bands": (
+            (2_000, "6.90 EUR"), (5_000, "8.90 EUR"),
+            (10_000, "12.90 EUR"), (20_000, "24.90 EUR"),
+        ),
+        "default_out": "public/finnmart-it.xml",
+        "default_summary": "public/finnmart-it-summary.json",
+    },
 }
 
 
