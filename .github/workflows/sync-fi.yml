@@ -1,0 +1,61 @@
+name: Sync Vuodevaatteet Finland production feed
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: finnmart-product-feeds
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Run Finland production feed tests
+        run: python -m unittest -v test_sync_fi_full.py
+      - name: Find the latest complete feed artifact
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow sync-feed.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          test -n "$run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: previous
+      - name: Restore the current published feed package
+        run: tar -xf previous/artifact.tar -C public
+      - name: Synchronize only the complete Finland production feed
+        env:
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+        run: python sync_fi_full.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy Finland feed update
+        id: deployment
+        uses: actions/deploy-pages@v4
