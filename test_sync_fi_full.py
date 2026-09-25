@@ -67,6 +67,32 @@ class FinlandFullFeedTests(unittest.TestCase):
         self.assertIsNone(item.find(f"{{{feed.G}}}pause"))
         self.assertIsNone(item.find(f"{{{feed.G}}}excluded_destination"))
 
+    def test_variant_gmctitle_overrides_generated_title(self):
+        variant = self.sample_variant()
+        variant["gmcTitle"] = {"value": "Erityinen GMC-otsikko 140 x 200"}
+        report = feed.empty_report()
+        item = feed.build_item(self.sample_product(), variant, report)
+        self.assertEqual(
+            item.findtext(f"{{{feed.G}}}title"),
+            "Erityinen GMC-otsikko 140 x 200",
+        )
+        self.assertEqual(report["gmctitle_override_items"], 1)
+
+    def test_empty_variant_gmctitle_keeps_existing_title_logic(self):
+        variant = self.sample_variant()
+        variant["gmcTitle"] = {"value": "   "}
+        report = feed.empty_report()
+        item = feed.build_item(self.sample_product(), variant, report)
+        self.assertEqual(item.findtext(f"{{{feed.G}}}title"), "Peitto, 140 x 200")
+        self.assertEqual(report["gmctitle_override_items"], 0)
+
+    def test_bulk_query_requests_variant_gmctitle(self):
+        query = feed.bulk_query_document()
+        self.assertIn(
+            'gmcTitle: metafield(namespace: "custom", key: "gmctitle") { value }',
+            query,
+        )
+
     def test_product_level_label_is_not_used(self):
         product = self.sample_product()
         product["customLabel1"] = {"value": "WRONG-PRODUCT-LABEL"}
