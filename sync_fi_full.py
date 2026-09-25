@@ -123,6 +123,7 @@ def bulk_query_document() -> str:
         "          compareAtPrice\n"
         "          availableForSale\n"
         "          selectedOptions { name value }\n"
+        '          gmcTitle: metafield(namespace: "custom", key: "gmctitle") { value }\n'
         + variant_labels
         + "          inventoryItem {\n"
         "            unitCost { amount currencyCode }\n"
@@ -240,7 +241,10 @@ def build_item(product: dict, variant: dict, report: dict) -> ET.Element:
 
     item = ET.Element("item")
     child(item, "id", f"shopify_FI_{product_id}_{variant_id}")
-    child(item, "title", variant_title(title, variant))
+    gmc_title = clean_text((variant.get("gmcTitle") or {}).get("value"), 150)
+    child(item, "title", gmc_title or variant_title(title, variant))
+    if gmc_title:
+        report["gmctitle_override_items"] += 1
     child(item, "description", description_html)
     encoded_handle = urllib.parse.quote(handle, safe="-._~")
     canonical = f"{STORE}/products/{encoded_handle}"
@@ -318,6 +322,7 @@ def empty_report() -> dict:
         "cogs_items": 0,
         "weight_fallback_items": 0,
         "description_fallback_items": 0,
+        "gmctitle_override_items": 0,
         "labels": {key: Counter() for key in LABEL_KEYS},
         "missing_labels": Counter(),
         "supplier_products": Counter(),
