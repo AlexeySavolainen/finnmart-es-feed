@@ -391,11 +391,21 @@ class Shopify:
                 payload = json.load(response)
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"Shopify token exchange failed with HTTP {exc.code}") from None
-        scopes = set(payload.get("scope", "").split(","))
+        scopes = {
+            value.strip()
+            for value in str(payload.get("scope", "")).split(",")
+            if value.strip()
+        }
         effective = scopes | ({"read_translations"} if "write_translations" in scopes else set())
         required = {"read_products", "read_publications", "read_translations"}
-        if not required.issubset(effective):
-            raise RuntimeError("Shopify app lacks read_products/read_publications/read_translations")
+        missing = required - effective
+        if missing:
+            raise RuntimeError(
+                "Shopify app is missing scopes: "
+                + ",".join(sorted(missing))
+                + "; granted scopes: "
+                + ",".join(sorted(scopes))
+            )
         return payload["access_token"]
 
     def call(self, query: str, variables: dict) -> dict:
