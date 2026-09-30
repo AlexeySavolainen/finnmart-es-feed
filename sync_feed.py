@@ -396,7 +396,14 @@ class Shopify:
             for value in str(payload.get("scope", "")).split(",")
             if value.strip()
         }
-        effective = scopes | ({"read_translations"} if "write_translations" in scopes else set())
+        # Shopify write scopes include the corresponding read access.  The
+        # client-credentials response can therefore omit the redundant
+        # read_* scope even though read operations are authorized.
+        effective = scopes | {
+            "read_" + scope.removeprefix("write_")
+            for scope in scopes
+            if scope.startswith("write_")
+        }
         required = {"read_products", "read_publications", "read_translations"}
         missing = required - effective
         if missing:
