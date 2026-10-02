@@ -29,9 +29,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          run_id=$(gh run list --workflow sync-feed.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')
-          test -n "$run_id"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          for run_id in $(gh run list --workflow sync-feed.yml --status success --limit 20 --json databaseId --jq '.[].databaseId'); do
+            artifact_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+              --jq '.artifacts[] | select(.name == "github-pages" and .expired == false) | .id' | head -n 1)
+            if [ -n "$artifact_id" ]; then
+              echo "Using github-pages artifact ${artifact_id} from run ${run_id}"
+              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "No non-expired github-pages artifact was found in the latest successful full-feed runs" >&2
+          exit 1
       - uses: actions/download-artifact@v4
         with:
           name: github-pages
