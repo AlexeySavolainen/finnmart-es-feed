@@ -81,6 +81,7 @@ def item_to_row(item: ET.Element) -> dict[str, str]:
         for index in range(5)
         if (value := field(item, f"custom_label_{index}"))
     }
+    ads_eligible = availability == "in_stock" and labels.get("custom_label_2", "").casefold() == "ads"
     return {
         "item_id": item_id,
         "title": title,
@@ -91,7 +92,7 @@ def item_to_row(item: ET.Element) -> dict[str, str]:
         "price": price,
         "availability": availability,
         "seller_name": SELLER_NAME,
-        "is_ads_eligible": "true" if availability == "in_stock" else "false",
+        "is_ads_eligible": "true" if ads_eligible else "false",
         "seller_url": STORE,
         "group_id": field(item, "item_group_id"),
         "gtin": gtin,
@@ -111,7 +112,12 @@ def item_to_row(item: ET.Element) -> dict[str, str]:
 
 def iter_rows(xml_path: Path, limit: int) -> tuple[list[dict[str, str]], dict]:
     rows: list[dict[str, str]] = []
-    report = {"items_scanned": 0, "out_of_stock_skipped": 0, "invalid_items": 0}
+    report = {
+        "items_scanned": 0,
+        "out_of_stock_skipped": 0,
+        "non_ads_label_skipped": 0,
+        "invalid_items": 0,
+    }
     for _, element in ET.iterparse(xml_path, events=("end",)):
         if element.tag != "item":
             continue
@@ -125,6 +131,9 @@ def iter_rows(xml_path: Path, limit: int) -> tuple[list[dict[str, str]], dict]:
         element.clear()
         if row["availability"] != "in_stock":
             report["out_of_stock_skipped"] += 1
+            continue
+        if row["is_ads_eligible"] != "true":
+            report["non_ads_label_skipped"] += 1
             continue
         rows.append(row)
         if limit and len(rows) >= limit:
