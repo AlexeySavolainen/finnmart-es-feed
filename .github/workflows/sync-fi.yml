@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Run Finland production feed tests
-        run: python -m unittest -v test_sync_fi_full.py
+        run: python -m unittest -v test_sync_fi_full.py test_openai_ads_feed.py
       - name: Find the latest complete feed artifact
         id: source
         env:
@@ -52,6 +52,8 @@ jobs:
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_fi_full.py
+      - name: Build the 100-item Finland OpenAI Ads pilot feed
+        run: python build_openai_ads_feed.py --limit 100
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
