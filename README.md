@@ -70,6 +70,19 @@ Full field-coverage and validation report:
 
 `/vuodevaatteet-fi-production-candidate-summary.json`
 
+OpenAI Ads Finland pilot (100 in-stock variants, OpenAI-native UTF-8 CSV.gz):
+
+`/vuodevaatteet-fi-openai-ads-test.csv.gz`
+
+OpenAI Ads pilot validation report:
+
+`/vuodevaatteet-fi-openai-ads-test-summary.json`
+
+The OpenAI Ads pilot is a separate output derived from the already validated
+Finnish XML. It contains plain-text descriptions, stable variant IDs, EUR
+prices, Finnish landing pages, seller identity, ad eligibility, and variant
+custom labels in `ads_metadata`. It does not replace or modify the GMC source.
+
 The full candidate uses stable `shopify_FI_` offer IDs and is intentionally not
 connected to Merchant Center automatically. It is generated with Shopify Bulk
 GraphQL and written/validated as a stream so the complete catalog does not need
