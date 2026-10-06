@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Run unit tests
-        run: python -m unittest -v test_sync_feed.py test_sync_fi_pilot.py test_sync_fi_full.py
+        run: python -m unittest -v test_sync_feed.py test_sync_fi_pilot.py test_sync_fi_full.py test_openai_ads_feed.py
       - name: Synchronize the Shopify Spain Market catalog
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
@@ -61,6 +61,9 @@ jobs:
         env:
           SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
         run: python sync_fi_full.py
+      - name: Build the 100-item Finland OpenAI Ads pilot feed
+        if: ${{ !inputs.preserve_finland_run }}
+        run: python build_openai_ads_feed.py --limit 100
       - uses: actions/download-artifact@v4
         if: ${{ inputs.preserve_finland_run != '' }}
         with:
@@ -73,7 +76,7 @@ jobs:
         run: |
           mkdir preserved
           tar -xf previous/artifact.tar -C preserved
-          for filename in vuodevaatteet-fi-pilot.xml vuodevaatteet-fi-pilot-summary.json vuodevaatteet-fi-production-candidate.xml vuodevaatteet-fi-production-candidate-summary.json; do
+          for filename in vuodevaatteet-fi-pilot.xml vuodevaatteet-fi-pilot-summary.json vuodevaatteet-fi-production-candidate.xml vuodevaatteet-fi-production-candidate-summary.json vuodevaatteet-fi-openai-ads-test.csv.gz vuodevaatteet-fi-openai-ads-test-summary.json; do
             cp "preserved/$filename" "public/$filename"
             cmp "preserved/$filename" "public/$filename"
           done
