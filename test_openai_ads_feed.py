@@ -31,6 +31,7 @@ class OpenAIAdsFeedTests(unittest.TestCase):
             "product_type": "Peitot",
             "size": "140 x 200",
             "custom_label_0": "New Royal Textile",
+            "custom_label_2": "ADS",
             "custom_label_3": "ROYAL-PROFIT",
         }
         for key, value in values.items():
@@ -46,11 +47,21 @@ class OpenAIAdsFeedTests(unittest.TestCase):
         self.assertEqual(row["is_eligible_checkout"], "false")
         self.assertEqual(
             json.loads(row["ads_metadata"]),
-            {"custom_label_0": "New Royal Textile", "custom_label_3": "ROYAL-PROFIT"},
+            {
+                "custom_label_0": "New Royal Textile",
+                "custom_label_2": "ADS",
+                "custom_label_3": "ROYAL-PROFIT",
+            },
         )
 
     def test_out_of_stock_item_is_not_ads_eligible(self):
         row = feed.item_to_row(self.item("out_of_stock"))
+        self.assertEqual(row["is_ads_eligible"], "false")
+
+    def test_noads_variant_is_not_ads_eligible(self):
+        item = self.item()
+        item.find(f"{{{G}}}custom_label_2").text = "NOADS"
+        row = feed.item_to_row(item)
         self.assertEqual(row["is_ads_eligible"], "false")
 
     def test_build_publishes_exactly_100_in_stock_rows(self):
