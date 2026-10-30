@@ -54,6 +54,7 @@ CURRENCY = "EUR"
 LANGUAGE = "fi"
 FEED_LABEL = "FI"
 PRODUCT_SEARCH = "status:active AND published_status:published"
+GMC_EXCLUSION_TAGS = {"gmc_exclude_nudity"}
 MINIMUM_PRODUCTS = 100_000
 MAX_FAILURE_RATE = Decimal("0.02")
 USER_AGENT = "VuodevaatteetFinlandFeed/1.0"
@@ -323,6 +324,7 @@ def empty_report() -> dict:
         "weight_fallback_items": 0,
         "description_fallback_items": 0,
         "gmctitle_override_items": 0,
+        "policy_excluded_products": 0,
         "labels": {key: Counter() for key in LABEL_KEYS},
         "missing_labels": Counter(),
         "supplier_products": Counter(),
@@ -346,6 +348,10 @@ def emit_product(out, product: dict, report: dict) -> None:
     report["products_seen"] += 1
     if product.get("status") != "ACTIVE":
         record_failure(report, product, "bulk search returned non-active product")
+        return
+    product_tags = {clean_text(value).casefold() for value in product.get("tags", [])}
+    if product_tags & GMC_EXCLUSION_TAGS:
+        report["policy_excluded_products"] += 1
         return
     variants = product.get("_variants", [])
     if not variants:

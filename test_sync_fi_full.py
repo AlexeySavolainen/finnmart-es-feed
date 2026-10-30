@@ -1,5 +1,6 @@
 import unittest
 import xml.etree.ElementTree as ET
+from io import BytesIO
 
 import sync_fi_full as feed
 
@@ -106,6 +107,32 @@ class FinlandFullFeedTests(unittest.TestCase):
         self.assertEqual(feed.supplier_from_tags(["New Royal Textile"]), "Royal Textile")
         self.assertEqual(feed.supplier_from_tags(["vida-xl"]), "VidaXL")
         self.assertEqual(feed.supplier_from_tags(["Unrelated"]), "Other")
+
+    def test_policy_tag_excludes_entire_product_without_failure(self):
+        product = self.sample_product()
+        product["tags"].append("GMC_EXCLUDE_NUDITY")
+        product["_variants"] = [self.sample_variant()]
+        report = feed.empty_report()
+        out = BytesIO()
+
+        feed.emit_product(out, product, report)
+
+        self.assertEqual(out.getvalue(), b"")
+        self.assertEqual(report["products_seen"], 1)
+        self.assertEqual(report["products"], 0)
+        self.assertEqual(report["items"], 0)
+        self.assertEqual(report["policy_excluded_products"], 1)
+        self.assertEqual(report["failure_counts"], {})
+
+    def test_policy_tag_match_is_case_insensitive(self):
+        product = self.sample_product()
+        product["tags"] = ["gmc_exclude_nudity"]
+        product["_variants"] = [self.sample_variant()]
+        report = feed.empty_report()
+
+        feed.emit_product(BytesIO(), product, report)
+
+        self.assertEqual(report["policy_excluded_products"], 1)
 
     def test_description_and_weight_fallbacks(self):
         product = self.sample_product()
